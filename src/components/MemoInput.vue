@@ -187,7 +187,7 @@ async function startSystem() {
     // 设备上没有识别服务 / 插件异常 → 之后自动改用云端
     if (/没有可用的系统语音识别服务|不支持系统语音识别|启动系统语音识别失败/.test(msg)) {
       voiceMode.value = 'cloud'
-      voiceError.value = msg + '，已切换为云端识别，请再点一次🎤'
+      voiceError.value = msg + '，已切换为云端识别，请再点一次语音按钮'
     }
   } finally {
     sysListening.value = false
@@ -305,11 +305,16 @@ onBeforeUnmount(() => {
 
 // ═══════════ 拍照 OCR ═══════════
 
-async function triggerImage() {
+// mode: 'camera' 强制相机 / 'gallery' 走相册选择
+async function triggerImage(mode: 'camera' | 'gallery') {
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = 'image/*'
-  input.setAttribute('capture', 'environment')
+  if (mode === 'camera') {
+    // capture=environment 在 Android WebView 强制调起后置相机
+    input.setAttribute('capture', 'environment')
+  }
+  // gallery 模式不加 capture：系统弹相册/文件选择菜单
   input.onchange = async (e: any) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -334,8 +339,8 @@ async function triggerImage() {
 
 <template>
   <div class="input-area">
-    <h3>✍️ 录入新备忘</h3>
-    <textarea v-model="text" placeholder="输入备忘内容，或点🎤语音 / 📷拍照..." rows="4" @keydown.ctrl.enter="submit" />
+    <h3><van-icon name="edit" size="16" /> 录入新备忘</h3>
+    <textarea v-model="text" placeholder="输入备忘内容，或点下方按钮语音 / 拍照..." rows="4" @keydown.ctrl.enter="submit" />
     <div class="actions">
       <button
         class="voice"
@@ -343,41 +348,53 @@ async function triggerImage() {
         :disabled="transcribing"
         @click="startVoice"
       >
-        <template v-if="sysListening || recording">⏹ 结束</template>
-        <template v-else-if="transcribing">识别中...</template>
-        <template v-else>🎤 语音</template>
+        <van-icon v-if="sysListening || recording" name="stop-circle-o" size="15" />
+        <van-icon v-else-if="transcribing" name="underway" size="15" />
+        <van-icon v-else name="volume-o" size="15" />
+        <span>{{ sysListening || recording ? '结束' : transcribing ? '识别中...' : '语音' }}</span>
       </button>
-      <button class="camera" :disabled="ocrLoading" @click="triggerImage">
-        📷 {{ ocrLoading ? '识别中...' : '拍照/选图' }}
+      <button class="camera" :disabled="ocrLoading" @click="triggerImage('camera')">
+        <van-icon name="photograph" size="15" />
+        <span>{{ ocrLoading ? '识别中...' : '拍照' }}</span>
       </button>
-      <button class="submit" @click="submit">✍️ 生成草稿</button>
+      <button class="camera" :disabled="ocrLoading" @click="triggerImage('gallery')">
+        <van-icon name="photo-o" size="15" />
+        <span>{{ ocrLoading ? '识别中...' : '选图' }}</span>
+      </button>
+      <button class="submit" @click="submit">
+        <van-icon name="records-o" size="15" /> 生成草稿
+      </button>
     </div>
 
     <div v-if="sysListening" class="live-hint">
       <span class="dot" /> 正在听…说完自动结束
       <div v-if="partialText" class="partial">“{{ partialText }}”</div>
     </div>
-    <p v-else-if="recording" class="recording-hint">🎙 正在录音，说完再点一次「结束」自动转文字（最长 28 秒）</p>
+    <p v-else-if="recording" class="recording-hint"><van-icon name="volume-o" size="12" /> 正在录音，说完再点一次「结束」自动转文字（最长 28 秒）</p>
 
-    <p v-if="voiceTip" class="tip">💡 {{ voiceTip }}</p>
-    <p v-if="voiceError" class="warn">⚠️ {{ voiceError }}</p>
-    <p v-if="ocrError" class="warn">⚠️ {{ ocrError }}</p>
+    <p v-if="voiceTip" class="tip"><van-icon name="bulb-o" size="12" /> {{ voiceTip }}</p>
+    <p v-if="voiceError" class="warn"><van-icon name="warning-o" size="12" /> {{ voiceError }}</p>
+    <p v-if="ocrError" class="warn"><van-icon name="warning-o" size="12" /> {{ ocrError }}</p>
     <p v-if="!sysListening && !recording && !voiceError && !ocrError" class="hint">
       Ctrl+Enter 发送 |
       <button class="mode-link" @click="toggleVoiceMode">
-        🎤 {{ voiceMode === 'system' ? ('系统语音识别' + (sysLabel ? `（${sysLabel}）` : '')) : '云端语音转文字' }}
+        <van-icon name="volume-o" size="12" />
+        {{ voiceMode === 'system' ? ('系统语音识别' + (sysLabel ? `（${sysLabel}）` : '')) : '云端语音转文字' }}
       </button>
-      | 📷 拍照 OCR
+      | 拍照 OCR
     </p>
   </div>
 </template>
 
 <style scoped>
 .input-area { padding: 16px; }
-h3 { margin-bottom: 10px; font-size: 16px; }
+h3 { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; font-size: 16px; }
 textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 15px; resize: vertical; font-family: inherit; }
 .actions { display: flex; gap: 6px; margin-top: 10px; }
-.actions button { flex: 1; padding: 10px 6px; border: none; border-radius: 10px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+.actions button {
+  flex: 1; padding: 10px 6px; border: none; border-radius: 10px; font-size: 14px; cursor: pointer;
+  white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+}
 .voice { background: #eee; }
 .voice.active { background: #e55; color: #fff; }
 .voice.busy { background: #f2f2f2; color: #999; }
@@ -393,8 +410,10 @@ textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
 .partial { margin-top: 6px; color: #666; font-size: 13px; }
 .recording-hint { margin-top: 8px; font-size: 12px; color: #c62828; background: #fdecea; padding: 8px; border-radius: 6px; text-align: center; }
+.recording-hint .van-icon, .live-hint .van-icon { vertical-align: -2px; }
 .hint { margin-top: 8px; font-size: 12px; color: #999; text-align: center; }
-.mode-link { padding: 0; border: none; background: none; color: #4a90d9; font-size: 12px; cursor: pointer; }
+.mode-link { display: inline-flex; align-items: center; gap: 2px; vertical-align: -2px; padding: 0; border: none; background: none; color: #4a90d9; font-size: 12px; cursor: pointer; }
+.tip .van-icon, .warn .van-icon { vertical-align: -2px; }
 .tip { margin-top: 8px; font-size: 12px; color: #8a6d3b; background: #fff8e1; padding: 8px; border-radius: 6px; text-align: center; }
 .warn { margin-top: 8px; font-size: 12px; color: #c62828; text-align: center; background: #fdecea; padding: 8px; border-radius: 6px; }
 </style>

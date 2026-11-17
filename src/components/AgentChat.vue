@@ -64,12 +64,12 @@ onMounted(async () => {
       </div>
     </div>
 
-    <p v-if="errMsg" class="err">⚠️ {{ errMsg }}</p>
+    <p v-if="errMsg" class="err"><van-icon name="warning-o" size="12" /> {{ errMsg }}</p>
 
     <div class="quick">
-      <van-button size="small" plain @click="quickPrompt('列出我最近的5条备忘')">📋 列出最近</van-button>
-      <van-button size="small" plain @click="quickPrompt('搜索：开会')">🔍 搜索"开会"</van-button>
-      <van-button size="small" plain @click="quickPrompt('导出全部数据')">📦 导出</van-button>
+      <van-button size="small" plain icon="records-o" @click="quickPrompt('列出我最近的5条备忘')">列出最近</van-button>
+      <van-button size="small" plain icon="search" @click="quickPrompt('搜索：开会')">搜索"开会"</van-button>
+      <van-button size="small" plain icon="upgrade" @click="quickPrompt('导出全部数据')">导出</van-button>
     </div>
 
     <div class="input-bar">
@@ -81,8 +81,10 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.chat-panel { display: flex; flex-direction: column; height: 100%; }
-.chat-msgs { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+/* 父级 .app-main 是 flex 容器，这里必须 flex:1 + min-height:0，
+   否则 height:100% 在高度不确定的父级里无效，消息区会塌陷 */
+.chat-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.chat-msgs { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .msg { display: flex; }
 .msg.user { justify-content: flex-end; }
 .msg.assistant { justify-content: flex-start; }
@@ -92,6 +94,7 @@ onMounted(async () => {
 .typing { letter-spacing: 2px; animation: blink 1s infinite; color: #888; }
 @keyframes blink { 50% { opacity: .3; } }
 .err { margin: 4px 12px; padding: 8px; background: #fdecea; color: #c62828; border-radius: 6px; font-size: 12px; }
+.err .van-icon { vertical-align: -2px; }
 .quick { display: flex; gap: 6px; padding: 0 12px 8px; flex-wrap: wrap; }
 .input-bar { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid #eee; align-items: flex-end; }
 .chat-input { flex: 1; padding: 0; }

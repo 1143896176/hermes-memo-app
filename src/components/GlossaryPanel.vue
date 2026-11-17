@@ -30,8 +30,8 @@ onMounted(load)
       <van-field v-model="wrong" placeholder="错误词" class="add-field" />
       <span class="arrow">→</span>
       <van-field v-model="correct" placeholder="正确词" class="add-field" />
-      <van-button block type="primary" size="small" @click="add">添加</van-button>
     </div>
+    <van-button block type="primary" size="small" class="add-submit" @click="add">添加</van-button>
     <div class="terms">
       <div v-for="t in terms" :key="t.id" class="term-row">
         <span class="wrong">{{ t.wrong_term }}</span>
@@ -48,8 +48,9 @@ onMounted(load)
 <style scoped>
 .panel { padding: 16px; }
 .desc { font-size: 12px; color: #888; line-height: 1.6; margin-bottom: 12px; }
-.add-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 16px; }
-.add-field { flex: 1 1 38%; min-width: 0; padding: 0; }
+.add-form { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.add-field { flex: 1 1 0; min-width: 0; padding: 0; }
+.add-submit { margin-bottom: 16px; }
 .arrow { color: #aaa; font-size: 14px; }
 .term-row { display: flex; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 14px; }
 .wrong { color: #e55; text-decoration: line-through; }

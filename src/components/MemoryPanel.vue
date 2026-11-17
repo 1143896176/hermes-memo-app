@@ -6,8 +6,9 @@ import {
   listSkills, saveSkill, deleteSkill,
 } from '../services/api'
 
-type Tab = 'memory' | 'skills'
-const tab = ref<Tab>('memory')
+// 注意：不能命名为 Tab，会与上方 import { Tab } from 'vant' 冲突
+type TabKey = 'memory' | 'skills'
+const tab = ref<TabKey>('memory')
 
 const memory = ref('')
 const user = ref('')
@@ -81,9 +82,13 @@ onMounted(() => { loadProfile(); loadSkills() })
 
 <template>
   <div class="panel">
-    <van-tabs v-model:active="tab">
-      <van-tab name="memory" title="🧠 记忆与画像" />
-      <van-tab name="skills" title="⚡ 技能" />
+    <van-tabs v-model:active="tab" shrink>
+      <van-tab name="memory">
+        <template #title><van-icon name="bulb-o" size="14" class="tab-ico" />记忆与画像</template>
+      </van-tab>
+      <van-tab name="skills">
+        <template #title><van-icon name="fire-o" size="14" class="tab-ico" />技能</template>
+      </van-tab>
     </van-tabs>
 
     <div v-if="tab === 'memory'">
@@ -92,12 +97,25 @@ onMounted(() => { loadProfile(); loadSkills() })
         让助手更懂你。每次生成草稿时自动加载。
       </p>
 
-      <van-field v-model="user" type="textarea" rows="6" label="用户画像" placeholder="例如：用户是程序员，常用术语：G代码、刀轨、A2UI\n偏好简洁回复\n工作日在北京" />
-
-      <van-field v-model="memory" type="textarea" rows="8" label="持久记忆" placeholder="例如：常用地点：公司（海淀）、家（朝阳）\n每周五下午有周会\n对花粉过敏" />
+      <van-cell-group inset class="field-group">
+        <van-field
+          v-model="user"
+          type="textarea"
+          rows="5"
+          label="用户画像"
+          placeholder="例如：用户是程序员，常用术语：G代码、刀轨、A2UI&#10;偏好简洁回复&#10;工作日在北京"
+        />
+        <van-field
+          v-model="memory"
+          type="textarea"
+          rows="6"
+          label="持久记忆"
+          placeholder="例如：常用地点：公司（海淀）、家（朝阳）&#10;每周五下午有周会&#10;对花粉过敏"
+        />
+      </van-cell-group>
 
       <div class="save-wrap">
-        <van-button block type="primary" @click="saveProfile">{{ saved ? '✅ 已保存' : '💾 保存' }}</van-button>
+        <van-button block type="primary" :icon="saved ? 'success' : 'passed'" @click="saveProfile">{{ saved ? '已保存' : '保存' }}</van-button>
       </div>
     </div>
 
@@ -113,7 +131,7 @@ onMounted(() => { loadProfile(); loadSkills() })
       <div class="skill-form">
         <van-field v-model="newSkillName" placeholder="技能名（如 meeting-notes）" />
         <van-field v-model="newSkillContent" type="textarea" rows="4" placeholder="技能内容（markdown）" />
-        <van-button block type="primary" size="small" @click="addOrUpdateSkill">{{ editingSkill ? '✏️ 更新' : '➕ 添加' }}</van-button>
+        <van-button block type="primary" size="small" :icon="editingSkill ? 'edit' : 'plus'" @click="addOrUpdateSkill">{{ editingSkill ? '更新' : '添加' }}</van-button>
         <van-button v-if="editingSkill" block size="small" @click="editingSkill = null; newSkillName = ''; newSkillContent = ''">取消</van-button>
       </div>
 
@@ -144,7 +162,9 @@ onMounted(() => { loadProfile(); loadSkills() })
 
 <style scoped>
 .panel { padding: 16px; }
+.tab-ico { margin-right: 4px; vertical-align: -2px; }
 .desc { font-size: 12px; color: #888; line-height: 1.6; margin-bottom: 14px; }
+.field-group { margin: 0 0 16px; }
 .save-wrap { margin-top: 16px; }
 .skill-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .skill-list { display: flex; flex-direction: column; gap: 8px; }

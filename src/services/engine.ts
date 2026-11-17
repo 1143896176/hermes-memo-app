@@ -728,7 +728,7 @@ export async function confirmDraft(d: DraftResult) {
 
 export async function ocrRecognize(file: File): Promise<{ text: string; confidence: number }> {
   if (!_ocrKey) {
-    throw new Error('未配置 OCR API Key，请到 ⚙️ 设置中填写')
+    throw new Error('未配置 OCR API Key，请到「设置」中填写')
   }
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
@@ -895,7 +895,7 @@ function buildAsrHotwords(extra?: string[]): string[] {
 export async function transcribeAudio(blob: Blob, opts: TranscribeOptions = {}): Promise<{ text: string }> {
   const key = _asrKey || _ocrKey || _apiKey1 || _apiKey2
   if (!key) {
-    throw new Error('未配置 API Key，请到 ⚙️ 设置中填写')
+    throw new Error('未配置 API Key，请到「设置」中填写')
   }
   if (!blob || !blob.size) {
     throw new Error('录音为空，请重试')

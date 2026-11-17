@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { NavBar, Icon, ActionSheet, Popup, Tabbar, TabbarItem, FloatingBubble } from 'vant'
+import { Overlay, Loading } from 'vant'
 import MemoList from './components/MemoList.vue'
 import MemoInput from './components/MemoInput.vue'
 import DraftCard from './components/DraftCard.vue'
@@ -17,14 +17,23 @@ import { getApiConfig, setApiConfig, initEngine, DEFAULT_TEXT_MODEL, DEFAULT_VIS
 import { invalidateAgent } from './services/agent'
 
 type MainTab = 'memos' | 'agent'
+type PanelKey = 'glossary' | 'export' | 'settings' | 'memory' | 'knowledge'
+
 const mainTab = ref<MainTab>('memos')
-function switchTab(t: MainTab) {
-  if (t === 'memos' && mainTab.value === 'agent') refreshKey.value++
-  mainTab.value = t
+
+// van-tabbar 的 v-model 是 string | number，用 computed 桥接避免类型冲突；
+// 切页副作用单独放 @change，不能写在 set 里（Vant 先更新 model 再触发 change）
+const tabbarActive = computed<string | number>({
+  get: () => mainTab.value,
+  set: (v) => { mainTab.value = v as MainTab },
+})
+function onTabChange(name: string | number) {
+  if (name === 'memos') refreshKey.value++
 }
+
 const showInput = ref(false)
 const showSettings = ref(false)
-const settingsPanel = ref<'glossary' | 'export' | 'settings' | 'memory' | 'knowledge' | null>(null)
+const settingsPanel = ref<PanelKey | null>(null)
 const draft = ref<DraftResult | null>(null)
 const draftLoading = ref(false)
 const draftSaving = ref(false)
@@ -42,52 +51,81 @@ loadNodejsPluginSync()
     ocrKey: cfg.ocrKey || '', ocrModel: cfg.ocrModel || DEFAULT_VISION_MODEL,
   }
   let needSave = false
-  if (LEGACY_TEXT_MODELS.includes(defaultConfig.modelName)) { defaultConfig.modelName = DEFAULT_TEXT_MODEL; needSave = true }
+  if (LEGACY_TEXT_MODELS.includes(defaultConfig.modelName)) {
+    defaultConfig.modelName = DEFAULT_TEXT_MODEL
+    needSave = true
+  }
   if (needSave) setApiConfig(defaultConfig)
-  if (isNativeEnv()) { await waitForNode(15000); await syncApiConfigToNode(defaultConfig) }
+  if (isNativeEnv()) {
+    await waitForNode(15000)
+    await syncApiConfigToNode(defaultConfig)
+  }
   invalidateAgent()
 })()
 
 async function onTextSubmit(text: string) {
-  draftLoading.value = true; errorMsg.value = ''
+  draftLoading.value = true
+  errorMsg.value = ''
   try {
     const result = await createDraft(text)
     if (!result.draft.title && !result.draft.content) errorMsg.value = '生成失败：请在 API 设置中填写 Key'
-    else draft.value = result
-  } catch (e: any) { errorMsg.value = e?.message || '网络错误' }
-  finally { draftLoading.value = false }
+    else { draft.value = result; showInput.value = false }
+  } catch (e: any) {
+    errorMsg.value = e?.message || '网络错误'
+  } finally {
+    draftLoading.value = false
+  }
 }
+
 async function onConfirm() {
   if (!draft.value) return
-  draftSaving.value = true; errorMsg.value = ''
-  try { await confirmDraft(draft.value); draft.value = null; showInput.value = false; refreshKey.value++ }
-  catch { errorMsg.value = '保存失败' }
-  finally { draftSaving.value = false }
+  draftSaving.value = true
+  errorMsg.value = ''
+  try {
+    await confirmDraft(draft.value)
+    draft.value = null
+    showInput.value = false
+    refreshKey.value++
+  } catch {
+    errorMsg.value = '保存失败'
+  } finally {
+    draftSaving.value = false
+  }
 }
+
 async function onRevise(newText: string) {
   if (!draft.value) return
-  draftLoading.value = true; errorMsg.value = ''
+  draftLoading.value = true
+  errorMsg.value = ''
   try {
     const result = await reviseDraft(draft.value.rawText, newText)
     if (!result.draft.title && !result.draft.content) errorMsg.value = '重新生成失败'
     else draft.value = result
-  } catch { errorMsg.value = '重新生成失败' }
-  finally { draftLoading.value = false }
+  } catch {
+    errorMsg.value = '重新生成失败'
+  } finally {
+    draftLoading.value = false
+  }
 }
+
 function onCancel() { draft.value = null }
-function openSettings(panel: 'glossary' | 'export' | 'settings' | 'memory' | 'knowledge') { showSettings.value = false; settingsPanel.value = panel }
+
+function openSettings(panel: PanelKey) {
+  showSettings.value = false
+  settingsPanel.value = panel
+}
 function closeSettings() { settingsPanel.value = null }
 
 const settingsActions = [
-  { name: '🔑 API 设置', value: 'settings' },
-  { name: '📖 术语词典', value: 'glossary' },
-  { name: '🧠 记忆 / 技能', value: 'memory' },
-  { name: '📚 知识库', value: 'knowledge' },
-  { name: '📦 导出分享', value: 'export' },
+  { name: 'API 设置', value: 'settings', icon: 'setting-o' },
+  { name: '术语词典', value: 'glossary', icon: 'font-o' },
+  { name: '记忆 / 技能', value: 'memory', icon: 'bulb-o' },
+  { name: '知识库', value: 'knowledge', icon: 'description-o' },
+  { name: '导出分享', value: 'export', icon: 'upgrade' },
 ]
 
 function onSelectSettings(item: { name: string; value: string }) {
-  openSettings(item.value as 'settings' | 'glossary' | 'memory' | 'knowledge' | 'export')
+  openSettings(item.value as PanelKey)
 }
 
 const showSettingsPanel = computed({
@@ -95,15 +133,15 @@ const showSettingsPanel = computed({
   set: (val: boolean) => { if (!val) closeSettings() },
 })
 
-const panelTitle = computed(() => {
-  const map: Record<string, string> = {
-    settings: '🔑 API 设置',
-    glossary: '📖 术语词典',
-    memory: '🧠 记忆 / 技能',
-    knowledge: '📚 知识库',
-    export: '📦 导出分享',
+const panelMeta = computed(() => {
+  const map: Record<PanelKey, { title: string; icon: string }> = {
+    settings: { title: 'API 设置', icon: 'setting-o' },
+    glossary: { title: '术语词典', icon: 'font-o' },
+    memory: { title: '记忆 / 技能', icon: 'bulb-o' },
+    knowledge: { title: '知识库', icon: 'description-o' },
+    export: { title: '导出分享', icon: 'upgrade' },
   }
-  return settingsPanel.value ? map[settingsPanel.value] || '' : ''
+  return settingsPanel.value ? map[settingsPanel.value] : { title: '', icon: '' }
 })
 </script>
 
@@ -126,59 +164,238 @@ const panelTitle = computed(() => {
     <van-popup
       v-model:show="showSettingsPanel"
       position="bottom"
+      class="settings-popup"
       :style="{ height: '85%' }"
       round
-      closeable
-      close-icon-position="top-left"
     >
-      <van-nav-bar :title="panelTitle" @click-left="closeSettings">
-        <template #left>
-          <van-icon name="arrow-left" @click="closeSettings" />
-        </template>
-      </van-nav-bar>
-      <SettingsPanel v-if="settingsPanel === 'settings'" />
-      <GlossaryPanel v-if="settingsPanel === 'glossary'" />
-      <MemoryPanel v-if="settingsPanel === 'memory'" />
-      <KnowledgePanel v-if="settingsPanel === 'knowledge'" />
-      <ExportPanel v-if="settingsPanel === 'export'" @imported="refreshKey++" />
+      <div class="popup-head">
+        <van-icon name="arrow-left" size="19" class="popup-back" @click="closeSettings" />
+        <div class="popup-title">
+          <van-icon :name="panelMeta.icon" size="16" />
+          <span>{{ panelMeta.title }}</span>
+        </div>
+        <span class="popup-head-pad" />
+      </div>
+      <div class="popup-body">
+        <SettingsPanel v-if="settingsPanel === 'settings'" />
+        <GlossaryPanel v-else-if="settingsPanel === 'glossary'" />
+        <MemoryPanel v-else-if="settingsPanel === 'memory'" />
+        <KnowledgePanel v-else-if="settingsPanel === 'knowledge'" />
+        <ExportPanel v-else-if="settingsPanel === 'export'" @imported="refreshKey++" />
+      </div>
     </van-popup>
 
-    <main>
-      <template v-if="mainTab === 'memos'">
-        <div v-if="draftLoading && !draft" class="loading-bar"><span class="spinner" /> AI 正在解析备忘...</div>
-        <div v-if="errorMsg" class="error-bar" @click="errorMsg = ''">{{ errorMsg }}</div>
-        <DraftCard v-if="draft" :draft="draft" :loading="draftLoading" :saving="draftSaving" @confirm="onConfirm" @revise="onRevise" @cancel="onCancel" />
-        <div v-if="showInput" class="input-overlay" @click.self="showInput = false">
-          <div class="input-panel"><MemoInput @submit="onTextSubmit" /><button class="close-input" @click="showInput = false">取消</button></div>
+    <main class="app-main">
+      <div v-if="mainTab === 'memos'" class="tab-page">
+        <div v-if="errorMsg" class="error-bar" @click="errorMsg = ''">
+          <van-icon name="warning-o" /> {{ errorMsg }}
         </div>
-        <MemoList :key="refreshKey" />
-      </template>
-      <template v-else><AgentChat /></template>
+        <MemoList :key="refreshKey" class="page-scroll" />
+      </div>
+      <AgentChat v-else class="tab-page" />
     </main>
 
-    <van-tabbar v-model="mainTab" @change="switchTab" safe-area-inset-bottom>
+    <!-- 草稿生成中：全屏 loading 遮罩 -->
+    <van-overlay :show="draftLoading && !draft" z-index="9999">
+      <div class="loading-mask">
+        <van-loading size="36" color="#4a90d9" vertical>
+          AI 正在解析备忘...
+        </van-loading>
+      </div>
+    </van-overlay>
+
+    <van-tabbar
+      v-model="tabbarActive"
+      :fixed="false"
+      safe-area-inset-bottom
+      @change="onTabChange"
+    >
       <van-tabbar-item name="memos" icon="notes-o">备忘录</van-tabbar-item>
       <van-tabbar-item name="agent" icon="chat-o">助手</van-tabbar-item>
     </van-tabbar>
 
-    <van-floating-bubble v-if="!showInput && mainTab === 'memos'" icon="plus" @click="showInput = true" />
+    <van-button
+      v-if="!showInput && mainTab === 'memos'"
+      class="fab"
+      type="primary"
+      round
+      icon="plus"
+      @click="showInput = true"
+    />
+
+    <div v-if="showInput" class="input-overlay" @click.self="showInput = false">
+      <div class="input-panel">
+        <MemoInput @submit="onTextSubmit" />
+        <button class="close-input" @click="showInput = false">取消</button>
+      </div>
+    </div>
+
+    <DraftCard
+      v-if="draft"
+      :draft="draft"
+      :loading="draftLoading"
+      :saving="draftSaving"
+      @confirm="onConfirm"
+      @revise="onRevise"
+      @cancel="onCancel"
+    />
   </div>
 </template>
 
 <style>
-:root {
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+  background: #fff;
 }
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
-.app { width: 100%; min-height: 100vh; background: #fff; position: relative; }
-.input-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 25; display: flex; align-items: flex-end; justify-content: center; }
-.input-panel { width: 100%; max-width: 600px; background: #fff; border-radius: 16px 16px 0 0; padding-bottom: calc(20px + var(--safe-bottom)); animation: slideUp .2s ease-out; }
-@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-.close-input { display: block; width: 88%; margin: 0 auto; padding: 10px; border: 1px solid #ddd; border-radius: 10px; background: #fff; font-size: 14px; cursor: pointer; text-align: center; color: #888; }
-.loading-bar { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 16px; color: #4a90d9; font-size: 14px; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid #ddd; border-top-color: #4a90d9; border-radius: 50%; animation: spin .6s linear infinite; }
-.error-bar { margin: 8px 12px; padding: 12px; background: #fff3cd; color: #856404; border-radius: 8px; font-size: 13px; cursor: pointer; text-align: center; }
+
+/* 中间区域：自己撑满剩余高度并承接滚动 */
+.app-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tab-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── 设置弹层：标题栏固定 + 内容独立滚动 ── */
+.settings-popup {
+  display: flex;
+  flex-direction: column;
+}
+.popup-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 14px;
+  border-bottom: 1px solid #eee;
+  background: #fff;
+}
+.popup-back {
+  flex: none;
+  cursor: pointer;
+  color: #323233;
+}
+.popup-title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+.popup-head-pad {
+  width: 19px;
+  flex: none;
+}
+.popup-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
+/* ── 录入面板 ── */
+.input-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .4);
+  z-index: 2000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.input-panel {
+  width: 100%;
+  max-width: 600px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 16px 16px 0 0;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  animation: slideUp .2s ease-out;
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.close-input {
+  display: block;
+  width: 88%;
+  margin: 0 auto;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 14px;
+  color: #888;
+  text-align: center;
+  cursor: pointer;
+}
+
+/* ── 悬浮录入按钮：absolute 定位在容器内，避免宽屏跑到视口外 ── */
+.fab {
+  position: absolute;
+  right: 20px;
+  bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  font-size: 22px;
+  z-index: 9;
+  box-shadow: 0 4px 16px rgba(74, 144, 217, .4);
+}
+
+.loading-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  padding: 16px;
+  color: #4a90d9;
+  font-size: 14px;
+}
+
+.loading-mask {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #4a90d9;
+}
+
+.error-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 8px 12px;
+  padding: 12px;
+  background: #fff3cd;
+  color: #856404;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: center;
+}
 </style>

@@ -302,7 +302,7 @@ export async function getMemoAgent(): Promise<DeepAgent> {
   const cfg = getApiConfig()
   const key = cfg.apiKey1 || cfg.apiKey2
   if (!key) {
-    throw new Error('未配置 LLM API Key，请到 ⚙️ 设置中填写')
+    throw new Error('未配置 LLM API Key，请到「设置」中填写')
   }
 
   const cacheKey = `${key}|${cfg.apiBase}|${cfg.modelName}`

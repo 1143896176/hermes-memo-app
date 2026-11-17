@@ -22,7 +22,7 @@ async function handleExport() {
       const { callNode } = await import('../services/node-bridge')
       const result = await (callNode as any)('export.file', { ...opts.value })
       filePath.value = result.file
-      msg.value = '\u2705 已保存到 ' + result.file
+      msg.value = '已保存到 ' + result.file
     } else {
       const data = await exportData({ ...opts.value })
       const json = JSON.stringify(data, null, 2)
@@ -33,10 +33,10 @@ async function handleExport() {
       a.href = url; a.download = `memo-backup-${stamp}.json`
       a.click(); window.open(url)
       URL.revokeObjectURL(url)
-      msg.value = '\u2705 已导出'
+      msg.value = '已导出'
     }
   } catch (e: any) {
-    errMsg.value = '\u274c 导出失败：' + (e?.message || String(e))
+    errMsg.value = '导出失败：' + (e?.message || String(e))
   } finally { busy.value = false }
 }
 
@@ -51,10 +51,10 @@ async function handleImport() {
       const text = await file.text()
       const data = JSON.parse(text)
       const result = await importData(data)
-      msg.value = '\u2705 已导入 ' + (result.imported ?? '?') + ' 条'
+      msg.value = '已导入 ' + (result.imported ?? '?') + ' 条'
       emit('imported')
     } catch (e: any) {
-      errMsg.value = '\u274c 导入失败：' + (e?.message || String(e))
+      errMsg.value = '导入失败：' + (e?.message || String(e))
     } finally { busy.value = false }
   }
   input.click()
@@ -76,13 +76,13 @@ async function handleImport() {
     </div>
 
     <div class="btns">
-      <van-button block type="primary" :disabled="busy" @click="handleExport">📦 导出</van-button>
-      <van-button block type="success" :disabled="busy" @click="handleImport">📥 导入备份</van-button>
+      <van-button block type="primary" icon="upgrade" :disabled="busy" @click="handleExport">导出</van-button>
+      <van-button block type="success" icon="down" :disabled="busy" @click="handleImport">导入备份</van-button>
     </div>
 
-    <p v-if="msg" class="msg ok">{{ msg }}</p>
-    <p v-if="errMsg" class="msg err">{{ errMsg }}</p>
-    <p v-if="filePath" class="file-path">📁 {{ filePath }}</p>
+    <p v-if="msg" class="msg ok"><van-icon name="passed" size="12" /> {{ msg }}</p>
+    <p v-if="errMsg" class="msg err"><van-icon name="warning-o" size="12" /> {{ errMsg }}</p>
+    <p v-if="filePath" class="file-path"><van-icon name="description-o" size="12" /> {{ filePath }}</p>
   </div>
 </template>
 
@@ -93,7 +93,9 @@ async function handleImport() {
 .sub { margin-left: 24px; }
 .btns { display: flex; gap: 8px; }
 .msg { margin-top: 12px; padding: 10px; border-radius: 8px; font-size: 13px; }
+.msg .van-icon { vertical-align: -2px; margin-right: 2px; }
 .msg.ok { background: #e8f5e9; color: #2e7d32; }
 .msg.err { background: #fdecea; color: #c62828; }
 .file-path { font-size: 11px; color: #888; margin-top: 8px; word-break: break-all; }
+.file-path .van-icon { vertical-align: -1px; margin-right: 2px; }
 </style>

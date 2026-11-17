@@ -44,36 +44,37 @@ function revise() { emit('revise', newText.value); editing.value = false }
 <template>
   <div class="draft-overlay">
     <div class="draft-card">
-      <h3>📝 确认草稿</h3>
+      <h3><van-icon name="edit" size="16" /> 确认草稿</h3>
       <div v-if="draft.corrections.length" class="corrections">
-        🔧 自动修正: <span v-for="c in draft.corrections" :key="c.from" class="fix">{{ c.from }}→{{ c.to }}</span>
+        <van-icon name="setting-o" size="12" /> 自动修正:
+        <span v-for="c in draft.corrections" :key="c.from" class="fix">{{ c.from }}→{{ c.to }}</span>
       </div>
 
       <!-- LLM 未参与结构化：明确告诉用户当前是原文草稿，不是模型解析结果 -->
       <div v-if="llmFallback" class="hint-fallback">
-        ⚠️ 未走模型结构化（{{ draft.llmError || 'LLM 未生效' }}），以下为原文草稿，可 ✏️ 修改后重试
+        <van-icon name="warning-o" size="13" /> 未走模型结构化（{{ draft.llmError || 'LLM 未生效' }}），以下为原文草稿，可修改后重试
       </div>
 
       <!-- 关键三字段高亮：事件 / 时间 / 地点 -->
       <div class="key-fields">
         <div class="key-field event" v-if="draft.draft.event">
-          <span class="kf-label">📌 事件</span>
+          <span class="kf-label"><van-icon name="flag-o" size="13" /> 事件</span>
           <span class="kf-value">{{ draft.draft.event }}</span>
         </div>
         <div class="key-field time" v-if="draft.draft.due_date">
-          <span class="kf-label">⏰ 时间</span>
+          <span class="kf-label"><van-icon name="clock-o" size="13" /> 时间</span>
           <span class="kf-value">{{ draft.draft.due_date }}</span>
         </div>
         <div class="key-field time inferred" v-else-if="draft.draft.inferred_due_date">
-          <span class="kf-label">💡 推测时间</span>
+          <span class="kf-label"><van-icon name="bulb-o" size="13" /> 推测时间</span>
           <span class="kf-value">{{ draft.draft.inferred_due_date }}</span>
         </div>
         <div class="key-field loc" v-if="draft.draft.location">
-          <span class="kf-label">📍 地点</span>
+          <span class="kf-label"><van-icon name="location-o" size="13" /> 地点</span>
           <span class="kf-value">{{ draft.draft.location }}</span>
         </div>
         <div class="key-field loc inferred" v-else-if="draft.draft.inferred_location">
-          <span class="kf-label">💡 推测地点</span>
+          <span class="kf-label"><van-icon name="bulb-o" size="13" /> 推测地点</span>
           <span class="kf-value">{{ draft.draft.inferred_location }}</span>
         </div>
       </div>
@@ -87,25 +88,35 @@ function revise() { emit('revise', newText.value); editing.value = false }
 
       <!-- 缺失字段提醒 -->
       <div v-if="!llmFallback && missingKeys.length" class="hint-missing">
-        💡 未识别到{{ missingKeys.join(' / ') }}，可 ✏️ 补充后重新生成
+        <van-icon name="bulb-o" size="12" /> 未识别到{{ missingKeys.join(' / ') }}，可修改后重新生成
       </div>
 
       <div v-if="editing" class="edit-area">
         <textarea v-model="newText" rows="3" placeholder="输入修改后的文本..." :disabled="loading" />
         <div class="edit-actions">
           <button @click="revise" :disabled="loading">
-            <span v-if="loading" class="spinner-sm" /> {{ loading ? '重新生成中...' : '🔄 重新生成' }}
+            <span v-if="loading" class="spinner-sm" />
+            <van-icon v-else name="replay" size="14" />
+            {{ loading ? '重新生成中...' : '重新生成' }}
           </button>
-          <button class="cancel" @click="editing = false" :disabled="loading">取消</button>
+          <button class="cancel" @click="editing = false" :disabled="loading">
+            <van-icon name="cross" size="14" /> 取消
+          </button>
         </div>
       </div>
 
       <div v-else class="confirm-actions">
         <button class="primary" @click="emit('confirm')" :disabled="saving">
-          <span v-if="saving" class="spinner-sm" /> {{ saving ? '保存中...' : '✅ 确认保存' }}
+          <span v-if="saving" class="spinner-sm" />
+          <van-icon v-else name="success" size="14" />
+          {{ saving ? '保存中...' : '确认保存' }}
         </button>
-        <button @click="editing = true" :disabled="saving">✏️ 修改</button>
-        <button class="cancel" @click="emit('cancel')" :disabled="saving">❌ 取消</button>
+        <button @click="editing = true" :disabled="saving">
+          <van-icon name="edit" size="14" /> 修改
+        </button>
+        <button class="cancel" @click="emit('cancel')" :disabled="saving">
+          <van-icon name="cross" size="14" /> 取消
+        </button>
       </div>
     </div>
   </div>
@@ -116,7 +127,7 @@ function revise() { emit('revise', newText.value); editing.value = false }
   padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
 .draft-card { background: #fff; border-radius: 14px; padding: 20px; width: 100%; max-width: 420px;
   max-height: min(100%, 720px); overflow-y: auto; overscroll-behavior: contain; }
-h3 { margin-bottom: 12px; }
+h3 { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
 .corrections { font-size: 12px; background: #fff3cd; padding: 8px; border-radius: 8px; margin-bottom: 12px; }
 .fix { background: #ffc107; padding: 1px 4px; border-radius: 4px; margin: 0 2px; font-size: 11px; }
 .field { margin-bottom: 10px; }
@@ -137,7 +148,7 @@ h3 { margin-bottom: 12px; }
 .key-field.time { background: #fff8e1; border-left-color: #ff9800; }
 .key-field.loc  { background: #e8f5e9; border-left-color: #4caf50; }
 .key-field.inferred { background: #fafafa; border-left-color: #bbb; border-style: dashed; }
-.kf-label { font-size: 12px; color: #666; white-space: nowrap; }
+.kf-label { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: #666; white-space: nowrap; }
 .kf-value { font-weight: 600; }
 
 .hint-missing { font-size: 12px; color: #999; padding: 8px; background: #fafafa; border-radius: 6px; text-align: center; }
@@ -146,7 +157,12 @@ h3 { margin-bottom: 12px; }
 .edit-area { margin-top: 12px; }
 .edit-area textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; }
 .edit-actions, .confirm-actions { display: flex; gap: 8px; margin-top: 12px; }
-.confirm-actions button, .edit-actions button { flex: 1; padding: 10px; border: none; border-radius: 10px; font-size: 14px; cursor: pointer; }
+.confirm-actions button, .edit-actions button {
+  flex: 1; padding: 10px; border: none; border-radius: 10px; font-size: 14px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+}
+/* 行内小图标与文字基线对齐 */
+.corrections .van-icon, .hint-fallback .van-icon, .hint-missing .van-icon { vertical-align: -2px; }
 .primary { background: #4a90d9; color: #fff; }
 .cancel { background: #eee; }
 button:disabled { opacity: .7; cursor: not-allowed; }
