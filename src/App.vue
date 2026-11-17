@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { NavBar, Icon, ActionSheet, Popup, Tabbar, TabbarItem, FloatingBubble } from 'vant'
 import MemoList from './components/MemoList.vue'
 import MemoInput from './components/MemoInput.vue'
 import DraftCard from './components/DraftCard.vue'
@@ -76,45 +77,73 @@ async function onRevise(newText: string) {
 function onCancel() { draft.value = null }
 function openSettings(panel: 'glossary' | 'export' | 'settings' | 'memory' | 'knowledge') { showSettings.value = false; settingsPanel.value = panel }
 function closeSettings() { settingsPanel.value = null }
-function onSettingsBlur() { setTimeout(() => { showSettings.value = false }, 200) }
+
+const settingsActions = [
+  { name: '🔑 API 设置', value: 'settings' },
+  { name: '📖 术语词典', value: 'glossary' },
+  { name: '🧠 记忆 / 技能', value: 'memory' },
+  { name: '📚 知识库', value: 'knowledge' },
+  { name: '📦 导出分享', value: 'export' },
+]
+
+function onSelectSettings(item: { name: string; value: string }) {
+  openSettings(item.value as 'settings' | 'glossary' | 'memory' | 'knowledge' | 'export')
+}
+
+const showSettingsPanel = computed({
+  get: () => !!settingsPanel.value,
+  set: (val: boolean) => { if (!val) closeSettings() },
+})
+
+const panelTitle = computed(() => {
+  const map: Record<string, string> = {
+    settings: '🔑 API 设置',
+    glossary: '📖 术语词典',
+    memory: '🧠 记忆 / 技能',
+    knowledge: '📚 知识库',
+    export: '📦 导出分享',
+  }
+  return settingsPanel.value ? map[settingsPanel.value] || '' : ''
+})
 </script>
 
 <template>
   <div class="app">
-    <header>
-      <h1>📝 智能备忘录</h1>
-      <div class="header-actions">
-        <button class="settings-btn" @click="showSettings = !showSettings" @blur="onSettingsBlur">⚙️</button>
-        <div v-if="showSettings" class="settings-dropdown">
-          <button @mousedown.prevent="openSettings('settings')">🔑 API 设置</button>
-          <button @mousedown.prevent="openSettings('glossary')">📖 术语词典</button>
-          <button @mousedown.prevent="openSettings('memory')">🧠 记忆 / 技能</button>
-          <button @mousedown.prevent="openSettings('knowledge')">📚 知识库</button>
-          <button @mousedown.prevent="openSettings('export')">📦 导出分享</button>
-        </div>
-      </div>
-    </header>
+    <van-nav-bar title="智能备忘录" safe-area-inset-top>
+      <template #right>
+        <van-icon name="setting-o" size="22" @click="showSettings = true" />
+      </template>
+    </van-nav-bar>
+
+    <van-action-sheet
+      v-model:show="showSettings"
+      :actions="settingsActions"
+      cancel-text="取消"
+      close-on-click-action
+      @select="onSelectSettings"
+    />
+
+    <van-popup
+      v-model:show="showSettingsPanel"
+      position="bottom"
+      :style="{ height: '85%' }"
+      round
+      closeable
+      close-icon-position="top-left"
+    >
+      <van-nav-bar :title="panelTitle" @click-left="closeSettings">
+        <template #left>
+          <van-icon name="arrow-left" @click="closeSettings" />
+        </template>
+      </van-nav-bar>
+      <SettingsPanel v-if="settingsPanel === 'settings'" />
+      <GlossaryPanel v-if="settingsPanel === 'glossary'" />
+      <MemoryPanel v-if="settingsPanel === 'memory'" />
+      <KnowledgePanel v-if="settingsPanel === 'knowledge'" />
+      <ExportPanel v-if="settingsPanel === 'export'" @imported="refreshKey++" />
+    </van-popup>
 
     <main>
-      <div v-if="settingsPanel" class="overlay" @click.self="closeSettings">
-        <div class="overlay-panel">
-          <div class="overlay-head">
-            <span>{{ settingsPanel === 'settings' ? '🔑 API 设置' : settingsPanel === 'glossary' ? '📖 术语词典' : settingsPanel === 'memory' ? '🧠 记忆 / 技能' : settingsPanel === 'knowledge' ? '📚 知识库' : '📦 导出分享' }}</span>
-            <button class="close-btn" @click="closeSettings">✕</button>
-          </div>
-          <SettingsPanel v-if="settingsPanel === 'settings'" />
-          <GlossaryPanel v-if="settingsPanel === 'glossary'" />
-          <MemoryPanel v-if="settingsPanel === 'memory'" />
-          <KnowledgePanel v-if="settingsPanel === 'knowledge'" />
-          <ExportPanel v-if="settingsPanel === 'export'" @imported="refreshKey++" />
-        </div>
-      </div>
-
-      <div class="main-tabs">
-        <button :class="{ sel: mainTab === 'memos' }" @click="switchTab('memos')">📋 备忘录</button>
-        <button :class="{ sel: mainTab === 'agent' }" @click="switchTab('agent')">🤖 Agent 对话</button>
-      </div>
-
       <template v-if="mainTab === 'memos'">
         <div v-if="draftLoading && !draft" class="loading-bar"><span class="spinner" /> AI 正在解析备忘...</div>
         <div v-if="errorMsg" class="error-bar" @click="errorMsg = ''">{{ errorMsg }}</div>
@@ -127,7 +156,12 @@ function onSettingsBlur() { setTimeout(() => { showSettings.value = false }, 200
       <template v-else><AgentChat /></template>
     </main>
 
-    <button v-if="!showInput && mainTab === 'memos'" class="fab" @click="showInput = true">＋</button>
+    <van-tabbar v-model="mainTab" @change="switchTab" safe-area-inset-bottom>
+      <van-tabbar-item name="memos" icon="notes-o">备忘录</van-tabbar-item>
+      <van-tabbar-item name="agent" icon="chat-o">助手</van-tabbar-item>
+    </van-tabbar>
+
+    <van-floating-bubble v-if="!showInput && mainTab === 'memos'" icon="plus" @click="showInput = true" />
   </div>
 </template>
 
@@ -135,30 +169,14 @@ function onSettingsBlur() { setTimeout(() => { showSettings.value = false }, 200
 :root {
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --header-h: calc(54px + var(--safe-top));
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
 .app { width: 100%; min-height: 100vh; background: #fff; position: relative; }
-header { background: #4a90d9; color: #fff; padding: 10px 16px; padding-top: calc(10px + var(--safe-top)); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 20; }
-header h1 { font-size: 17px; }
-.main-tabs { display: flex; background: #f5f5f5; border-bottom: 1px solid #eee; position: sticky; top: var(--header-h); z-index: 10; }
-.main-tabs button { flex: 1; padding: 10px; border: none; background: none; font-size: 14px; color: #666; cursor: pointer; border-bottom: 2px solid transparent; }
-.main-tabs button.sel { color: #4a90d9; border-bottom-color: #4a90d9; background: #fff; }
-.header-actions { position: relative; }
-.settings-btn { width: 34px; height: 34px; border: none; border-radius: 50%; background: rgba(255,255,255,.15); color: #fff; font-size: 17px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-.settings-dropdown { position: absolute; top: 40px; right: 0; background: #fff; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,.15); min-width: 140px; overflow: hidden; z-index: 30; }
-.settings-dropdown button { display: block; width: 100%; padding: 11px 16px; border: none; background: #fff; font-size: 14px; cursor: pointer; text-align: left; color: #333; }
-.settings-dropdown button:hover { background: #f0f4ff; }
-.fab { position: fixed; bottom: calc(24px + var(--safe-bottom)); right: 24px; width: 52px; height: 52px; border-radius: 50%; background: #4a90d9; color: #fff; border: none; font-size: 26px; cursor: pointer; box-shadow: 0 4px 16px rgba(74,144,217,.4); z-index: 10; display: flex; align-items: center; justify-content: center; }
 .input-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 25; display: flex; align-items: flex-end; justify-content: center; }
 .input-panel { width: 100%; max-width: 600px; background: #fff; border-radius: 16px 16px 0 0; padding-bottom: calc(20px + var(--safe-bottom)); animation: slideUp .2s ease-out; }
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .close-input { display: block; width: 88%; margin: 0 auto; padding: 10px; border: 1px solid #ddd; border-radius: 10px; background: #fff; font-size: 14px; cursor: pointer; text-align: center; color: #888; }
-.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 25; display: flex; align-items: center; justify-content: center; padding: calc(8px + var(--safe-top)) 0 calc(8px + var(--safe-bottom)); }
-.overlay-panel { width: 92%; max-width: 480px; max-height: min(100%, 720px); overflow-y: auto; background: #fff; border-radius: 16px; }
-.overlay-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #eee; font-size: 15px; font-weight: 600; position: sticky; top: 0; background: #fff; z-index: 1; }
-.close-btn { width: 32px; height: 32px; border: none; border-radius: 50%; background: #eee; font-size: 14px; cursor: pointer; color: #666; }
 .loading-bar { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 16px; color: #4a90d9; font-size: 14px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid #ddd; border-top-color: #4a90d9; border-radius: 50%; animation: spin .6s linear infinite; }

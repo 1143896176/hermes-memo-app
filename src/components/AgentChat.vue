@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
+import { Field, Button } from 'vant'
 import { chatWithAgent } from '../services/node-bridge'
 import { listenSystemSpeech, isSystemSpeechAvailable } from '../services/system-speech'
 
@@ -66,15 +67,15 @@ onMounted(async () => {
     <p v-if="errMsg" class="err">⚠️ {{ errMsg }}</p>
 
     <div class="quick">
-      <button @click="quickPrompt('列出我最近的5条备忘')">📋 列出最近</button>
-      <button @click="quickPrompt('搜索：开会')">🔍 搜索"开会"</button>
-      <button @click="quickPrompt('导出全部数据')">📦 导出</button>
+      <van-button size="small" plain @click="quickPrompt('列出我最近的5条备忘')">📋 列出最近</van-button>
+      <van-button size="small" plain @click="quickPrompt('搜索：开会')">🔍 搜索"开会"</van-button>
+      <van-button size="small" plain @click="quickPrompt('导出全部数据')">📦 导出</van-button>
     </div>
 
     <div class="input-bar">
-      <button v-if="voiceAvailable" class="mic" :class="{ active: listening }" @click="startVoice" :disabled="loading || listening">{{ listening ? '🎙️' : '🎤' }}</button>
-      <textarea v-model="input" rows="2" placeholder="跟 Agent 说话..." @keydown.ctrl.enter="send" :disabled="loading" />
-      <button class="send" @click="send" :disabled="loading || !input.trim()">{{ loading ? '思考中...' : '发送' }}</button>
+      <van-button v-if="voiceAvailable" icon="volume-o" :class="{ active: listening }" @click="startVoice" :disabled="loading || listening" />
+      <van-field v-model="input" type="textarea" autosize rows="1" maxlength="-1" placeholder="跟 Agent 说话..." :disabled="loading" class="chat-input" />
+      <van-button type="primary" :loading="loading" :disabled="!input.trim()" @click="send">{{ loading ? '思考中...' : '发送' }}</van-button>
     </div>
   </div>
 </template>
@@ -92,16 +93,7 @@ onMounted(async () => {
 @keyframes blink { 50% { opacity: .3; } }
 .err { margin: 4px 12px; padding: 8px; background: #fdecea; color: #c62828; border-radius: 6px; font-size: 12px; }
 .quick { display: flex; gap: 6px; padding: 0 12px 8px; flex-wrap: wrap; }
-.quick button { padding: 6px 10px; border: 1px solid #ddd; border-radius: 14px; background: #fff; font-size: 12px; cursor: pointer; white-space: nowrap; }
-.quick button:hover { background: #f0f4ff; }
-.input-bar { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid #eee; }
-.input-bar textarea { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; font-family: inherit; resize: none; }
-.input-bar textarea:focus { border-color: #4a90d9; outline: none; }
-.input-bar .send { padding: 0 18px; background: #4a90d9; color: #fff; border: none; border-radius: 10px; font-size: 14px; cursor: pointer; white-space: nowrap; }
-.input-bar .send:disabled { opacity: .5; cursor: not-allowed; }
-.mic { width: 40px; height: 40px; padding: 0; border: 1px solid #ddd; border-radius: 50%; background: #fff; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all .15s; }
-.mic:hover { background: #f0f4ff; border-color: #4a90d9; }
-.mic.active { background: #fdecea; border-color: #c62828; animation: pulse 1.2s infinite; }
-.mic:disabled { opacity: .5; cursor: not-allowed; }
-@keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+.input-bar { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid #eee; align-items: flex-end; }
+.chat-input { flex: 1; padding: 0; }
+.chat-input :deep(.van-field__control) { min-height: 36px; }
 </style>

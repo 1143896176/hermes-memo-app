@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { Search, CellGroup, Cell, SwipeCell, Empty, Button, Tag } from 'vant'
 import { fetchKnowledge, searchKnowledge, saveKnowledge, deleteKnowledge } from '../services/node-bridge'
 
 interface KnowledgeItem {
@@ -10,6 +11,7 @@ interface KnowledgeItem {
 const items = ref<KnowledgeItem[]>([])
 const search = ref('')
 const editing = ref<Partial<KnowledgeItem> | null>(null)
+const newTag = ref('')
 const msg = ref('')
 
 async function load() {
@@ -72,41 +74,46 @@ onMounted(load)
     <p class="desc">知识库：记录操作流程、注意事项、经验教训。Agent 对话时可搜索引用。</p>
 
     <div class="bar">
-      <input v-model="search" placeholder="搜索知识..." @input="load" class="search-input" />
-      <button @click="load">🔍</button>
-      <button @click="startNew" class="add-btn">+ 新建</button>
+      <van-search v-model="search" shape="round" placeholder="搜索知识..." @search="load" @clear="load" @update:model-value="load" />
+      <van-button type="primary" size="small" @click="startNew" class="add-btn">+ 新建</van-button>
     </div>
 
     <p v-if="msg" class="msg">{{ msg }}</p>
 
-    <!-- 编辑表单 -->
     <div v-if="editing" class="edit-form">
-      <input v-model="editing.title" placeholder="标题" class="f-title" />
-      <textarea v-model="editing.content" placeholder="详细内容（操作步骤、注意事项...）" rows="8" class="f-content" />
+      <van-field v-model="editing.title" label="标题" placeholder="标题" />
+      <van-field v-model="editing.content" type="textarea" rows="8" label="内容" placeholder="详细内容（操作步骤、注意事项...）" />
       <div class="f-tags">
-        <span v-for="(t, i) in editing.tags" :key="i" class="tag">{{ t }} <button @click="removeTag(i)">×</button></span>
-        <input v-model="newTag" placeholder="添加标签" @keydown.enter="addTag(newTag); newTag=''" class="tag-input" />
+        <van-tag v-for="(t, i) in editing.tags" :key="i" closeable @close="removeTag(i)">{{ t }}</van-tag>
+        <van-field v-model="newTag" placeholder="添加标签" @keydown.enter="addTag(newTag); newTag=''" class="tag-input" />
       </div>
       <div class="f-actions">
-        <button @click="save" class="save-btn">保存</button>
-        <button @click="cancel" class="cancel-btn">取消</button>
+        <van-button type="primary" @click="save">保存</van-button>
+        <van-button @click="cancel">取消</van-button>
       </div>
     </div>
 
-    <!-- 列表 -->
     <div v-if="!editing" class="list">
-      <div v-for="it in items" :key="it.id" class="item">
-        <div class="item-header" @click="editItem(it)">
-          <strong>{{ it.title }}</strong>
-          <span class="item-date">{{ it.updated_at?.slice(0, 10) }}</span>
-        </div>
-        <p class="item-content">{{ it.content.slice(0, 120) }}{{ it.content.length > 120 ? '...' : '' }}</p>
-        <p v-if="it.tags?.length" class="item-tags">
-          <span v-for="t in it.tags" :key="t" class="tag">{{ t }}</span>
-        </p>
-        <button class="del-btn" @click.stop="remove(it.id)">删除</button>
+      <van-cell-group inset>
+        <van-swipe-cell v-for="it in items" :key="it.id">
+          <van-cell :title="it.title" :label="it.content.slice(0, 120) + (it.content.length > 120 ? '...' : '')" is-link @click="editItem(it)">
+            <template #default>
+              <span class="item-date">{{ it.updated_at?.slice(0, 10) }}</span>
+            </template>
+            <template #label>
+              <div>
+                <span class="item-label-text">{{ it.content.slice(0, 120) }}{{ it.content.length > 120 ? '...' : '' }}</span>
+                <div v-if="it.tags?.length" class="item-tags">
+                  <van-tag v-for="t in it.tags" :key="t" size="small" plain type="primary">{{ t }}</van-tag>
+                </div>
+              </div>
+            </template>
+          </van-cell>
+        </van-swipe-cell>
+      </van-cell-group>
+      <div v-if="!items.length" class="empty-wrap">
+        <van-empty description="暂无知识条目。点「+ 新建」添加第一条。" />
       </div>
-      <p v-if="!items.length" class="empty">暂无知识条目。点「+ 新建」添加第一条。</p>
     </div>
   </div>
 </template>
@@ -114,30 +121,16 @@ onMounted(load)
 <style scoped>
 .panel { padding: 16px; }
 .desc { font-size: 12px; color: #888; margin-bottom: 12px; }
-.bar { display: flex; gap: 6px; margin-bottom: 12px; }
-.search-input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
-.bar button { padding: 8px 12px; background: #eee; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; cursor: pointer; }
-.add-btn { background: #4a90d9; color: #fff; border-color: #4a90d9; }
-
-.edit-form { background: #f9f9f9; padding: 12px; border-radius: 10px; margin-bottom: 12px; }
-.f-title { display: block; width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; margin-bottom: 8px; }
-.f-content { display: block; width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; margin-bottom: 8px; }
-.f-tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 10px; }
-.tag { display: inline-flex; align-items: center; gap: 2px; padding: 3px 8px; background: #e3f2fd; border-radius: 12px; font-size: 12px; }
-.tag button { padding: 0 3px; border: none; background: none; color: #999; cursor: pointer; font-size: 14px; }
-.tag-input { border: none; outline: none; font-size: 12px; padding: 4px; width: 80px; }
+.bar { display: flex; gap: 6px; align-items: center; margin-bottom: 12px; }
+.bar :deep(.van-search) { flex: 1; padding: 0; }
+.add-btn { flex-shrink: 0; }
+.edit-form { background: #f9f9f9; padding: 12px; border-radius: 10px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
+.f-tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tag-input { flex: 1; min-width: 80px; padding: 0; }
 .f-actions { display: flex; gap: 8px; }
-.save-btn { padding: 8px 20px; background: #4a90d9; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
-.cancel-btn { padding: 8px 20px; background: #eee; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; }
-
-.list { display: flex; flex-direction: column; gap: 8px; }
-.item { background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 10px; position: relative; }
-.item-header { cursor: pointer; display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-.item-header strong { font-size: 14px; }
 .item-date { font-size: 11px; color: #999; }
-.item-content { font-size: 13px; color: #555; margin: 0; line-height: 1.5; }
-.item-tags { margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap; }
-.del-btn { position: absolute; top: 8px; right: 8px; padding: 2px 8px; background: #fee; border: 1px solid #fcc; border-radius: 6px; font-size: 12px; color: #c62828; cursor: pointer; }
-.empty { text-align: center; color: #999; font-size: 13px; padding: 20px; }
+.item-label-text { font-size: 13px; color: #555; }
+.item-tags { margin-top: 4px; display: flex; gap: 4px; flex-wrap: wrap; }
+.empty-wrap { padding: 20px 0; }
 .msg { font-size: 12px; padding: 6px; border-radius: 6px; margin-bottom: 8px; }
 </style>
