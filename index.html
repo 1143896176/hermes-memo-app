@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#4a90d9" />
+    <title>智能备忘录</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <!-- Node.js polyfill：LangChain/deepagents 引用了 process, global, AsyncLocalStorage -->
+    <!-- 必须在 ES module 之前同步执行 -->
+    <script>
+      // process
+      window.process = window.process || { env: {}, version: '', platform: 'browser', nextTick: function(fn) { setTimeout(fn, 0) }, stdout: {}, stderr: {} };
+      window.global = window.global || window;
+      // AsyncLocalStorage 完整 polyfill（node:async_hooks）
+      // vite-plugin-node-polyfills 的 async_hooks 不完整，这里补上 constructor
+      if (!window.AsyncLocalStorage || typeof window.AsyncLocalStorage !== 'function') {
+        function AsyncLocalStorage() {
+          this._store = undefined;
+          this.enterWith = function(store) { this._store = store; };
+          this.exit = function(callback) { var old = this._store; this._store = undefined; var r = callback(); this._store = old; return r; };
+          this.run = function(store, callback) { var old = this._store; this._store = store; try { return callback(); } finally { this._store = old; } };
+          this.getStore = function() { return this._store; };
+          this.disable = function() {};
+        }
+        window.AsyncLocalStorage = AsyncLocalStorage;
+        // 同时挂到 globalThis 上
+        globalThis.AsyncLocalStorage = AsyncLocalStorage;
+      }
+      // node:async_hooks 的 getDefaultReturnStr 等其他导出
+      if (!globalThis.async_hooks) {
+        globalThis.async_hooks = {
+          AsyncLocalStorage: window.AsyncLocalStorage,
+          createHook: function() { return { enable: function(){}, disable: function(){} }; },
+          executionAsyncId: function() { return 0; },
+          executionAsyncResource: function() { return {}; },
+          triggerAsyncId: function() { return 0; },
+        };
+      }
+    </script>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
