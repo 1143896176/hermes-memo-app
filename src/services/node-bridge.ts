@@ -146,8 +146,10 @@ export async function callNode<T = any>(method: string, params?: any): Promise<T
 
   // 确保就绪
   if (!_nodeReady) {
-    const ok = await waitForNode()
-    if (!ok) throw new Error('Node runtime 未就绪（10s 超时）')
+    // iOS 无 JIT，冷启动加载 5.9MB vendor bundle 明显比安卓慢，
+    // 默认 10s 会误判"没起来"（表现：设置保存失败、草稿没走模型）。
+    const ok = await waitForNode(20_000)
+    if (!ok) throw new Error('Node runtime 未就绪（20s 超时），请稍后重试或重启 App')
   }
 
   const id = ++_callId
@@ -155,13 +157,13 @@ export async function callNode<T = any>(method: string, params?: any): Promise<T
     _pending.set(id, { resolve, reject })
     // 发送 RPC 到 Node（用 Promise.resolve 包装避免 then trap）
     Promise.resolve(plugin.send({ eventName: 'rpc', args: [{ id, method, params }] }))
-    // 单次调用超时
+    // 单次调用超时：草稿/保存首次会顺带建库 + 装载依赖，iOS 上给足时间
     setTimeout(() => {
       if (_pending.has(id)) {
         _pending.delete(id)
-        reject(new Error(`Node 调用超时: ${method}（30s）`))
+        reject(new Error(`Node 调用超时: ${method}（45s）`))
       }
-    }, 30_000)
+    }, 45_000)
   })
 }
 
@@ -527,7 +529,7 @@ export async function searchKnowledge(query: string): Promise<any[]> {
 }
 
 export async function saveKnowledge(data: any): Promise<{ id: number }> {
-  if (await shouldUseNode()) return callNode('knowledge.save', data)
+  if (await shouldUseNode()) return await callNode<any>('knowledge.save', data)
   const e = await browserEngine()
   return e.saveKnowledge(data)
 }

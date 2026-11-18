@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Overlay, Loading } from 'vant'
 import MemoList from './components/MemoList.vue'
 import MemoInput from './components/MemoInput.vue'
 import DraftCard from './components/DraftCard.vue'
