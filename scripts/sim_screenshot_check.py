@@ -136,7 +136,7 @@ def main() -> int:
     ap.add_argument("--bottom-cut", type=float, default=0.95)
     ap.add_argument("--min-variety", type=int, default=3, help="颜色种数下限")
     ap.add_argument("--min-content", type=float, default=0.005,
-                    help="非主色像素占比下限（默认 0.5%）")
+                    help="非主色像素占比下限（默认 0.005，即千分之五）")
     args = ap.parse_args()
 
     if not os.path.exists(args.png):
