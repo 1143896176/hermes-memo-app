@@ -48,3 +48,8 @@ android/local.properties
 ios/App/App/public/
 ios/App/build/
 
+
+# 本地打包产物 / Python 缓存
+out/
+__pycache__/
+*.pyc
