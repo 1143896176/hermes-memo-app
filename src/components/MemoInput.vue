@@ -7,6 +7,7 @@ import {
   probeSystemSpeech,
   isSystemSpeechAvailable,
   isServiceUnavailableError,
+  isPermissionError,
   resetSystemSpeechProbe,
   listenSystemSpeech,
   stopSystemSpeech,
@@ -21,7 +22,8 @@ const voiceTip = ref('')
 const ocrError = ref('')
 
 // ── 语音输入：优先系统识别，不可用时回退「录音 + 云端 ASR」 ──
-// system: 走 Android SpeechRecognizer（实时出字、不花额度）
+// system: 走系统识别（Android SpeechRecognizer / iOS SFSpeechRecognizer），
+//         实时出字、不花额度
 // cloud : 走 MediaRecorder 录音 + 智谱 GLM-ASR（需要 Key 和额度）
 type VoiceMode = 'system' | 'cloud'
 const voiceMode = ref<VoiceMode>('cloud')
@@ -124,12 +126,19 @@ async function toggleVoiceMode() {
     showTip('已切换为云端识别')
     return
   }
-  // 重新探测：用户可能刚装了语音服务 / 换了识别引擎
+  // 重新探测：用户可能刚装了语音服务 / 换了识别引擎 / 刚在设置里开了权限
   resetSystemSpeechProbe()
   const ok = await isSystemSpeechAvailable()
   if (!ok) {
-    // 这条提示只可能出现在 Android（iOS 没有原生识别插件，入口根本不渲染）。
-    // 但真机上一旦探测失败，用户需要知道"是环境的锅，不是 App 坏了"。
+    // 真机上一旦探测失败，用户需要知道"是环境的锅，不是 App 坏了"。
+    // 提示按平台分叉：Android 多半是只剩 Google 服务，iOS 多半是权限没给。
+    const p = await probeSystemSpeech()
+    if (p.authStatus === 'denied' || p.micGranted === false) {
+      showTip(p.micGranted === false
+        ? '麦克风权限未开启，请到「设置 → 隐私与安全性 → 麦克风」里允许后再试'
+        : '语音识别权限未开启，请到「设置 → 隐私与安全性 → 语音识别」里允许后再试')
+      return
+    }
     showTip(isAndroid()
       ? '本机没有可用的系统识别服务（仅有 Google 服务，国内不可用），只能走云端'
       : '本机没有可用的系统识别服务，只能走云端')
@@ -175,6 +184,9 @@ async function startSystem() {
     const msg = e?.message || '系统语音识别失败'
     voiceError.value = msg
 
+    // 权限问题只能用户自己去设置里开，切云端同样没有麦克风，白切
+    if (isPermissionError(e)) return
+
     if (isServiceUnavailableError(e)) {
       // 系统语音服务连不上（国产机上默认服务常是 Google 的，国内网络不通）
       // → 降级云端，并立刻续跑录音，省掉"请再点一次"
@@ -184,7 +196,9 @@ async function startSystem() {
       partialText.value = ''
       showTip('系统语音服务不可用，已自动改用云端识别，请直接说话')
       voiceError.value = ''
-      await new Promise((r) => setTimeout(r, 150))  // 等系统释放麦克风
+      // 等系统释放麦克风：iOS 还要等 AVAudioSession 取消激活，留宽一点，
+      // 否则紧接着的 getUserMedia 会拿到一个被占用的输入设备
+      await new Promise((r) => setTimeout(r, 300))
       await startRecorder()
       return
     }
@@ -382,8 +396,8 @@ async function triggerImage(mode: 'camera' | 'gallery') {
     <p v-if="ocrError" class="warn"><van-icon name="warning-o" size="12" /> {{ ocrError }}</p>
     <p v-if="!sysListening && !recording && !voiceError && !ocrError" class="hint">
       Ctrl+Enter 发送 |
-      <!-- 系统识别是 Android 原生插件能力，iOS 没有对应实现：
-           直接渲染成静态文字，避免点一下弹出"本机没有可用服务"的死路 -->
+      <!-- 系统识别是原生插件能力（Android SpeechRecognizer / iOS SFSpeechRecognizer）。
+           浏览器预览里没有插件，直接渲染成静态文字，避免点一下弹"本机没有可用服务"的死路 -->
       <button v-if="systemSpeechSupported()" class="mode-link" @click="toggleVoiceMode">
         <van-icon name="volume-o" size="12" />
         {{ voiceMode === 'system' ? ('系统语音识别' + (sysLabel ? `（${sysLabel}）` : '')) : '云端语音转文字' }}

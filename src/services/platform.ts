@@ -2,9 +2,9 @@
  * 平台判定 —— 只回答"我是谁"，不做任何业务判断。
  *
  * 为什么要单独一个文件：
- * 同一个功能在 Android 和 iOS 上的可用能力不一样（系统语音识别只有 Android
- * 有原生插件、WebView 内核不同导致报错文案也不同）。散落在各组件里写
- * `Capacitor.getPlatform() === 'android'` 会把平台知识撕成碎片，
+ * 同一个功能在 Android 和 iOS 上的可用能力不一样（系统语音识别两端各有原生插件，
+ * 但底层实现和授权方式不同；WebView 内核不同又导致报错文案也不同）。散落在各
+ * 组件里写 `Capacitor.getPlatform() === 'android'` 会把平台知识撕成碎片，
  * 加第三个平台（Web/PWA）时无处下手。
  */
 import { Capacitor } from '@capacitor/core'

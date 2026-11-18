@@ -64,8 +64,11 @@
 - 不在 Windows 上编译 IPA
 - 不重写 Vue3 Web 代码（Android 已验证，iOS WebView 兼容）
 - 不切换到 React Native / Swift 原生
-- 不实现 iOS 原生语音识别（SFSpeechRecognizer）—— 需在 Xcode 里加 Swift 插件并手改
-  `project.pbxproj`，无法在 Windows 上验证，先用云端 ASR，UI 已按平台自动切换文案
+
+> 已补做：iOS 原生语音识别（`ios/App/App/SystemSpeechPlugin.swift`，SFSpeechRecognizer
+> + AVAudioEngine，契约与 Android 插件一致）。原计划因"需手改 project.pbxproj 且
+> Windows 上无法验证"而搁置，现在 pbxproj 已改好、注册表由 `scripts/ios-setup.mjs`
+> 每次 sync 后补回，验证仍依赖 macOS 构建（CI 或 Xcode）。
 
 ## 当前 git 状态
 

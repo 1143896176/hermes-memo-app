@@ -27,7 +27,7 @@
 | 移动壳 | Capacitor 8（Android + iOS） |
 | 本地存储 | 原生：Node 运行时 `node:sqlite`（FTS5）；浏览器预览：sql.js → IndexedDB |
 | OCR | 智谱 `glm-4v-flash` |
-| 语音 | Android：系统 SpeechRecognizer → 云端兜底；iOS：MediaRecorder + 云端 ASR |
+| 语音 | Android：系统 SpeechRecognizer；iOS：系统 SFSpeechRecognizer（离线优先）；两者都带「录音 + 云端 ASR」兜底 |
 
 ## 目录结构
 
@@ -36,7 +36,7 @@ hermes-memo-app/
 ├── android/              # Capacitor Android 工程
 ├── ios/                  # Capacitor iOS 工程（SPM，最低 iOS 15）
 ├── scripts/
-│   └── ios-setup.mjs     # Mac 上补 Info.plist 权限/文件共享
+│   └── ios-setup.mjs     # Mac 上补 Info.plist 权限；全平台补本地插件注册表
 ├── public/
 │   ├── nodejs/           # 内嵌 Node 运行时（deepagents + sqlite）
 │   └── sql-wasm.wasm
@@ -143,7 +143,8 @@ scheme，Xcode 打开时会自动补，但 GitHub runner 上没有这个动作�
 
 | 项 | Android | iOS |
 |---|---|---|
-| 系统语音识别（不花额度） | 支持（SpeechRecognizer 插件） | 不支持，只能走云端 ASR（需 ASR Key） |
+| 系统语音识别（不花额度） | 支持（SpeechRecognizer 插件） | 支持（SFSpeechRecognizer 插件，默认离线识别，失败自动转在线） |
+| 语音授权 | 1 次（麦克风） | 2 次（麦克风 + 语音识别），均需在 Info.plist 声明 |
 | 导出备份文件位置 | App 私有目录，通过 FileProvider 分享 | 「文件」App → 我的 iPhone → 智能备忘录 → data/exports |
 | 键盘顶起页面 | `windowSoftInputMode=adjustResize` | `@capacitor/keyboard` 的 `resize: native` |
 | 最低系统 | Android 6+ | iOS 15+ |

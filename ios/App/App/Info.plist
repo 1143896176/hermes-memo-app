@@ -34,6 +34,10 @@
 	<string>用于从相册选择图片并识别其中的文字，图片仅在本机处理。</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>用于语音输入备忘，录音会发送到语音识别服务转成文字。</string>
+	<!-- 系统语音识别（SFSpeechRecognizer）的授权文案。
+	     少了这个键不是"识别不可用"，而是调用瞬间进程被系统终止。 -->
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>用于把你说的话实时转成备忘文字，语音由系统识别服务处理。</string>
 	<!-- ── 备份文件可见性 ──
 	     Node 运行时把导出结果写到 Documents/data/exports/。
 	     不开这两项，用户在 iOS 的「文件」App 里看不到导出的备份，等于导了拿不到。 -->
