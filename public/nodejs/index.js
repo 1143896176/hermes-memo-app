@@ -137,6 +137,162 @@ handlers['ping'] = async () => ({
   cwd: process.cwd(),
 });
 
+/**
+ * 运行诊断（设置 → 运行诊断）
+ *
+ * 真机（尤其 iOS）上拿不到 Xcode 控制台，出问题只能靠猜。这里把
+ * "到底哪一层坏了"需要的证据一次性收集齐：进程/架构、数据目录是否可写、
+ * sqlite / FTS5 是否可用、各库条数、LLM 配置是否真的落盘。
+ */
+handlers['diag.report'] = async () => {
+  const report = {
+    platform: `${process.platform}/${process.arch}`,
+    nodeVersion: process.version,
+    dataDir: DATA_DIR,
+    cwd: process.cwd(),
+    writable: false,
+    writeError: null,
+    sqlite: capabilities.sqlite,
+    sqliteError: capabilities.sqliteError,
+    fts5: false,
+    fts5Error: null,
+    counts: {},
+    countError: null,
+    llm: {},
+    time: new Date().toString(),
+  };
+
+  // 1) 数据目录可写性：iOS 上最隐蔽的一类失败（目录存在但只读）
+  try {
+    const probe = path.join(DATA_DIR, '.write-probe');
+    fs.writeFileSync(probe, String(Date.now()));
+    fs.unlinkSync(probe);
+    report.writable = true;
+  } catch (e) {
+    report.writeError = (e && e.message) || String(e);
+  }
+
+  // 2) FTS5：memo 表带 FTS5 虚表 + 触发器，缺了会导致整个 memo 模块加载失败
+  if (capabilities.sqlite) {
+    try {
+      const { openDb } = require('./db/index.js');
+      const mem = openDb(':memory:');
+      mem.exec('CREATE VIRTUAL TABLE t_probe USING fts5(x)');
+      mem.close();
+      report.fts5 = true;
+    } catch (e) {
+      report.fts5Error = (e && e.message) || String(e);
+    }
+  }
+
+  // 3) 各库条数：读得到说明 schema/迁移都正常
+  try {
+    const { memoCount } = require('./tools/memo.js');
+    report.counts.memos = memoCount({});
+  } catch (e) {
+    report.countError = (e && e.message) || String(e);
+  }
+  try {
+    const { openDb } = require('./db/index.js');
+    const gdb = openDb(path.join(DATA_DIR, 'glossary.db'), { readonly: true });
+    try {
+      report.counts.glossary = gdb.prepare('SELECT COUNT(*) AS c FROM glossary_terms').get().c;
+    } catch (e) {
+      // 全新安装时 glossary 模块还没被加载过，表还没建 —— 这不是故障
+      if (!/no such table/i.test((e && e.message) || '')) throw e;
+      report.counts.glossary = 0;
+    }
+    gdb.close();
+  } catch (e) {
+    if (!report.countError) report.countError = (e && e.message) || String(e);
+  }
+
+  // 4) LLM 配置：只看"有没有 Key"，绝不回传明文
+  try {
+    const { getConfig, getConfigFile } = require('./config.js');
+    const cfg = getConfig();
+    const file = getConfigFile();
+    report.llm = {
+      hasKey: !!cfg.apiKey,
+      keyLength: (cfg.apiKey || '').length,
+      hasBackupKey: !!cfg.apiKey2,
+      model: cfg.model,
+      baseURL: cfg.baseURL,
+      configFile: file,
+      configFileExists: fs.existsSync(file),
+    };
+  } catch (e) {
+    report.llm = { error: (e && e.message) || String(e) };
+  }
+
+  return report;
+};
+
+/**
+ * 模型连通性自测：真的发一次请求（含 json_object 模式），把原始报错带回来。
+ * 比"看日志猜"快得多——401 / 402 / 404 / 429 一眼区分。
+ */
+handlers['llm.ping'] = async () => {
+  const { getModel, getConfig } = require('./config.js');
+  const cfg = getConfig();
+  const base = { model: cfg.model, baseURL: cfg.baseURL, hasKey: !!cfg.apiKey };
+  const t0 = Date.now();
+  try {
+    const model = await getModel();
+    // 1) 普通调用
+    const resp = await model.invoke([{ role: 'user', content: '只回复两个字：正常' }]);
+    const text = typeof resp.content === 'string' ? resp.content : JSON.stringify(resp.content);
+    // 2) JSON 模式（草稿结构化实际用的就是这个）
+    let jsonOk = false;
+    let jsonError = null;
+    try {
+      const bound = typeof model.bind === 'function'
+        ? model.bind({ response_format: { type: 'json_object' } })
+        : model;
+      const r2 = await bound.invoke([{ role: 'user', content: '返回一个 JSON：{"ok":true}' }]);
+      const t2 = typeof r2.content === 'string' ? r2.content : JSON.stringify(r2.content);
+      jsonOk = /\{/.test(t2);
+    } catch (e) {
+      jsonError = (e && e.message) || String(e);
+    }
+    return {
+      ok: true,
+      ms: Date.now() - t0,
+      sample: String(text || '').slice(0, 60),
+      jsonOk,
+      jsonError,
+      ...base,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      ms: Date.now() - t0,
+      error: (e && e.message) || String(e),
+      ...base,
+    };
+  }
+};
+
+/**
+ * 读取当前配置（不含 Key 明文）
+ *
+ * 给启动流程用：原生环境的"真源"是 Node 落盘配置，WebView 里只有内存默认值。
+ * 前端先读这里，再决定要不要覆盖，避免每次冷启动都把用户存好的地址/模型冲掉。
+ */
+handlers['config.get'] = async () => {
+  const { getConfig, getConfigFile } = require('./config.js');
+  const cfg = getConfig();
+  return {
+    hasApiKey: !!cfg.apiKey,
+    keyLength: (cfg.apiKey || '').length,
+    model: cfg.model,
+    baseURL: cfg.baseURL,
+    ocrModel: cfg.ocrModel || '',
+    asrBase: cfg.asrBase || '',
+    configFile: getConfigFile(),
+  };
+};
+
 handlers['config.set'] = async (params) => {
   const { setConfig, resetModel, getConfig, getConfigFile } = require('./config.js');
   setConfig(params);

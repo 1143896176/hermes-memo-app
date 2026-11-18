@@ -9,16 +9,17 @@ import ExportPanel from './components/ExportPanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import MemoryPanel from './components/MemoryPanel.vue'
 import KnowledgePanel from './components/KnowledgePanel.vue'
+import DiagnosePanel from './components/DiagnosePanel.vue'
 import AgentChat from './components/AgentChat.vue'
 import { createDraft, confirmDraft, reviseDraft, type DraftResult } from './services/api'
-import { syncApiConfigToNode, isNativeEnv, waitForNode } from './services/node-bridge'
+import { syncApiConfigToNode, isNativeEnv, waitForNode, getNodeConfig } from './services/node-bridge'
 import { loadNodejsPluginSync } from './services/node-bridge'
-import { getApiConfig, setApiConfig, initEngine, DEFAULT_TEXT_MODEL, DEFAULT_VISION_MODEL, LEGACY_TEXT_MODELS } from './services/engine'
+import { getApiConfig, setApiConfig, initEngine, DEFAULT_TEXT_MODEL, DEFAULT_VISION_MODEL, DEFAULT_API_BASE, DEFAULT_ASR_BASE, LEGACY_TEXT_MODELS } from './services/engine'
 import { invalidateAgent } from './services/agent'
 import { initKeyboardDismiss } from './services/keyboard'
 
 type MainTab = 'memos' | 'agent'
-type PanelKey = 'glossary' | 'export' | 'settings' | 'memory' | 'knowledge'
+type PanelKey = 'glossary' | 'export' | 'settings' | 'memory' | 'knowledge' | 'diagnose'
 
 const mainTab = ref<MainTab>('memos')
 
@@ -49,9 +50,10 @@ initKeyboardDismiss()
   const cfg = getApiConfig()
   const defaultConfig = {
     apiKey1: cfg.apiKey1 || '', apiKey2: cfg.apiKey2,
-    apiBase: cfg.apiBase || 'https://open.bigmodel.cn/api/paas/v4',
+    apiBase: cfg.apiBase || DEFAULT_API_BASE,
     modelName: cfg.modelName || DEFAULT_TEXT_MODEL,
     ocrKey: cfg.ocrKey || '', ocrModel: cfg.ocrModel || DEFAULT_VISION_MODEL,
+    asrKey: cfg.asrKey || '', asrBase: cfg.asrBase || DEFAULT_ASR_BASE,
   }
   let needSave = false
   if (LEGACY_TEXT_MODELS.includes(defaultConfig.modelName)) {
@@ -60,8 +62,27 @@ initKeyboardDismiss()
   }
   if (needSave) setApiConfig(defaultConfig)
   if (isNativeEnv()) {
-    await waitForNode(15000)
-    await syncApiConfigToNode(defaultConfig)
+    // 启动自检：Node 没起来 / 配置没同步过去，都会让"识别不走模型"，
+    // 这两种情况必须在首页直接说出来，不能等用户去翻日志
+    const nodeOk = await waitForNode(15000)
+    if (!nodeOk) {
+      errorMsg.value = '本地运行时（Node）启动超时：数据库与模型都可能不可用，请重启 App；仍不行请看「运行诊断」'
+    } else {
+      // 原生环境以 Node 磁盘配置为准：WebView 里的只是内存默认值，
+      // 直接推过去会把用户上次存好的地址/模型覆盖掉（表现为"设置里是对的，发请求却 401"）
+      const nodeCfg = await getNodeConfig()
+      if (nodeCfg) {
+        if (nodeCfg.baseURL) defaultConfig.apiBase = nodeCfg.baseURL
+        if (nodeCfg.model) defaultConfig.modelName = nodeCfg.model
+        if (nodeCfg.ocrModel) defaultConfig.ocrModel = nodeCfg.ocrModel
+        if (nodeCfg.asrBase) defaultConfig.asrBase = nodeCfg.asrBase
+      }
+      try {
+        await syncApiConfigToNode(defaultConfig)
+      } catch (e: any) {
+        errorMsg.value = '配置同步到本地运行时失败：' + (e?.message || String(e))
+      }
+    }
   }
   invalidateAgent()
 })()
@@ -89,8 +110,9 @@ async function onConfirm() {
     draft.value = null
     showInput.value = false
     refreshKey.value++
-  } catch {
-    errorMsg.value = '保存失败'
+  } catch (e: any) {
+    // 不要再把真实原因吞成"保存失败"——真机上只能靠这句话定位
+    errorMsg.value = '保存失败：' + (e?.message || String(e))
   } finally {
     draftSaving.value = false
   }
@@ -104,8 +126,8 @@ async function onRevise(newText: string) {
     const result = await reviseDraft(draft.value.rawText, newText)
     if (!result.draft.title && !result.draft.content) errorMsg.value = '重新生成失败'
     else draft.value = result
-  } catch {
-    errorMsg.value = '重新生成失败'
+  } catch (e: any) {
+    errorMsg.value = '重新生成失败：' + (e?.message || String(e))
   } finally {
     draftLoading.value = false
   }
@@ -125,6 +147,7 @@ const settingsActions = [
   { name: '记忆 / 技能', value: 'memory', icon: 'bulb-o' },
   { name: '知识库', value: 'knowledge', icon: 'description-o' },
   { name: '导出分享', value: 'export', icon: 'upgrade' },
+  { name: '运行诊断', value: 'diagnose', icon: 'warning-o' },
 ]
 
 function onSelectSettings(item: { name: string; value: string }) {
@@ -143,6 +166,7 @@ const panelMeta = computed(() => {
     memory: { title: '记忆 / 技能', icon: 'bulb-o' },
     knowledge: { title: '知识库', icon: 'description-o' },
     export: { title: '导出分享', icon: 'upgrade' },
+    diagnose: { title: '运行诊断', icon: 'warning-o' },
   }
   return settingsPanel.value ? map[settingsPanel.value] : { title: '', icon: '' }
 })
@@ -185,6 +209,7 @@ const panelMeta = computed(() => {
         <MemoryPanel v-else-if="settingsPanel === 'memory'" />
         <KnowledgePanel v-else-if="settingsPanel === 'knowledge'" />
         <ExportPanel v-else-if="settingsPanel === 'export'" @imported="refreshKey++" />
+        <DiagnosePanel v-else-if="settingsPanel === 'diagnose'" />
       </div>
     </van-popup>
 

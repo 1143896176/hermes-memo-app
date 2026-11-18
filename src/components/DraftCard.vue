@@ -38,7 +38,38 @@ const missingKeys = computed<string[]>(() => {
 
 const llmFallback = computed(() => props.draft.llmUsed === false)
 
+/**
+ * 把模型报错翻译成"人话 + 该动哪里"
+ *
+ * 真机上用户只能看到这一行字，原始报错里 401/402/404/429 的含义
+ * 得直接说出来，否则只会反复点重试。
+ */
+const llmHint = computed(() => {
+  const raw = props.draft.llmError || 'LLM 未生效'
+  if (/未配置 API Key|Missing credentials/i.test(raw)) {
+    return '未配置 API Key：右上角 ⚙️ → API 设置，填 Key 后点保存'
+  }
+  if (/401|Unauthorized|invalid.*key|Incorrect API key|invalid_api_key/i.test(raw)) {
+    return 'Key 无效或与当前「LLM 地址」不匹配（401）：检查 Key 属于哪个服务商'
+  }
+  if (/402|insufficient|quota|balance|余额/i.test(raw)) {
+    return '额度不足（402）：这个 Key 没有可用额度'
+  }
+  if (/404|No endpoints|model.*not.*found|does not exist/i.test(raw)) {
+    return '模型不存在（404）：检查「文本模型」名称是否为该服务商支持的模型'
+  }
+  if (/429|rate.?limit|too many requests/i.test(raw)) {
+    return '被限流（429）：免费模型并发很低，等几秒点「重试」'
+  }
+  if (/超时|timeout|ETIMEDOUT|ECONNRESET/i.test(raw)) {
+    return '请求超时 / 网络中断：检查网络后点「重试」'
+  }
+  return raw
+})
+
 function revise() { emit('revise', newText.value); editing.value = false }
+/** 原文重跑一次结构化（限流、网络抖动时最有用，不用手打一遍） */
+function retry() { emit('revise', props.draft.correctedText || props.draft.rawText) }
 </script>
 
 <template>
@@ -52,7 +83,18 @@ function revise() { emit('revise', newText.value); editing.value = false }
 
       <!-- LLM 未参与结构化：明确告诉用户当前是原文草稿，不是模型解析结果 -->
       <div v-if="llmFallback" class="hint-fallback">
-        <van-icon name="warning-o" size="13" /> 未走模型结构化（{{ draft.llmError || 'LLM 未生效' }}），以下为原文草稿，可修改后重试
+        <div class="hf-line">
+          <van-icon name="warning-o" size="13" />
+          <span>未走模型结构化，以下是原文草稿</span>
+        </div>
+        <div class="hf-reason">{{ llmHint }}</div>
+        <div class="hf-actions">
+          <button class="hf-btn" :disabled="loading" @click="retry">
+            <span v-if="loading" class="spinner-sm dark" />
+            <van-icon v-else name="replay" size="13" />
+            {{ loading ? '重试中...' : '重试结构化' }}
+          </button>
+        </div>
       </div>
 
       <!-- 关键三字段高亮：事件 / 时间 / 地点 -->
@@ -154,6 +196,11 @@ h3 { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
 .hint-missing { font-size: 12px; color: #999; padding: 8px; background: #fafafa; border-radius: 6px; text-align: center; }
 .hint-fallback { font-size: 12px; color: #b26a00; background: #fff3cd; border-left: 4px solid #ffc107;
   padding: 8px 10px; border-radius: 8px; margin-bottom: 12px; line-height: 1.5; }
+.hf-line { display: flex; align-items: center; gap: 5px; font-weight: 600; }
+.hf-reason { margin-top: 4px; color: #8a5200; word-break: break-all; }
+.hf-actions { margin-top: 8px; }
+.hf-btn { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid #ffc107;
+  border-radius: 8px; background: #fff; color: #b26a00; font-size: 12px; cursor: pointer; }
 .edit-area { margin-top: 12px; }
 .edit-area textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; }
 .edit-actions, .confirm-actions { display: flex; gap: 8px; margin-top: 12px; }
@@ -174,4 +221,5 @@ button:disabled { opacity: .7; cursor: not-allowed; }
   border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%;
   animation: spin-sm .5s linear infinite;
 }
+.spinner-sm.dark { border-color: rgba(178,106,0,.25); border-top-color: #b26a00; }
 </style>

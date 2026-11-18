@@ -229,10 +229,18 @@ export type DraftResult = {
     tags: string[]
     location: string; due_date: string
     inferred_location?: string; inferred_due_date?: string
+    [key: string]: any
   }
   rawText: string
   correctedText: string
   corrections: { from: string; to: string }[]
+  /** LLM 是否真的参与了结构化（false = 已降级为原文草稿） */
+  llmUsed?: boolean
+  jsonMode?: boolean
+  /** 降级原因，UI 直接展示给用户 */
+  llmError?: string
+  missingKeyFields?: string[]
+  missingFields?: string[]
 }
 
 // ── 备忘录 CRUD ──
@@ -280,9 +288,102 @@ export async function reviseDraft(originalText: string, newText: string) {
 }
 
 export async function confirmDraft(d: any) {
-  if (await shouldUseNode()) return callNode('draft.confirm', { draft: d })
+  if (await shouldUseNode()) {
+    try {
+      return await callNode('draft.confirm', { draft: d })
+    } catch (e: any) {
+      // 兜底：结构化确认只是"存库 + 学习修正"，失败了也不能让用户刚识别出来的备忘丢掉。
+      // 直接走最朴素的 memo.save（不做学习记录），能存进去就先存。
+      const dd = (d && d.draft) ? d.draft : (d || {})
+      const title = String(dd.title || dd.content || '').trim()
+      const content = String(dd.content || dd.title || '').trim()
+      if (!title && !content) throw e
+      try {
+        const r: any = await callNode('memo.save', {
+          title: (title || content.slice(0, 30)).slice(0, 60),
+          content: content || title,
+          tags: Array.isArray(dd.tags) ? dd.tags.filter((t: any) => typeof t === 'string') : [],
+          event: typeof dd.event === 'string' ? dd.event : '',
+          location: dd.location || dd.inferred_location || '',
+          due_date: dd.due_date || dd.inferred_due_date || '',
+        })
+        return { ...r, fallback: true }
+      } catch (e2: any) {
+        throw new Error(`${e?.message || e}；兜底保存同样失败：${e2?.message || e2}`)
+      }
+    }
+  }
   const e = await browserEngine()
   return e.confirmDraft(d)
+}
+
+/**
+ * 读取 Node 侧落盘的配置（不含 Key 明文）；浏览器预览返回 null。
+ *
+ * 原生环境里真正持久的是 DATA_DIR/llm-config.json，WebView 的 engine 配置
+ * 只是内存 + IndexedDB。启动时先读这里，才能避免"用默认值覆盖用户配置"。
+ */
+export async function getNodeConfig(): Promise<{
+  hasApiKey: boolean; keyLength: number
+  model: string; baseURL: string
+  ocrModel?: string; asrBase?: string
+  configFile?: string
+} | null> {
+  if (!isNativeEnv()) return null
+  try {
+    return await callNode('config.get')
+  } catch (e) {
+    console.warn('[node-bridge] config.get failed:', e)
+    return null
+  }
+}
+
+// ── 诊断：把"哪一层坏了"变成一次按钮点击 ──
+/** 运行环境 + 数据库 + LLM 配置的完整自检（原生走 Node，浏览器走 sql.js） */
+export async function diagnose(): Promise<any> {
+  if (isNativeEnv()) {
+    const started = Date.now()
+    try {
+      const r = await callNode('diag.report')
+      return { mode: 'node', rpcMs: Date.now() - started, ...r }
+    } catch (e: any) {
+      // Node 起来了但 diag 失败，或 Node 根本没起来 —— 这两种要靠这里的报错区分
+      return {
+        mode: 'node',
+        rpcMs: Date.now() - started,
+        fatal: e?.message || String(e),
+        nodeReady: isNodeReady(),
+      }
+    }
+  }
+  const e = await browserEngine()
+  const cfg = e.getApiConfig()
+  const report: any = {
+    mode: 'browser',
+    platform: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+    llm: { hasKey: !!cfg.apiKey1, keyLength: (cfg.apiKey1 || '').length, model: cfg.modelName, baseURL: cfg.apiBase },
+    counts: {},
+  }
+  try {
+    const r: any = await e.fetchMemos({ limit: '1' })
+    report.counts.memos = r.total
+  } catch (err: any) {
+    report.countError = err?.message || String(err)
+  }
+  return report
+}
+
+/** 真打一次模型请求，返回 401/402/404/429 这类原始错误 */
+export async function llmPing(): Promise<any> {
+  if (isNativeEnv()) {
+    try {
+      return { mode: 'node', ...(await callNode('llm.ping')) }
+    } catch (e: any) {
+      return { mode: 'node', ok: false, error: e?.message || String(e) }
+    }
+  }
+  const e = await browserEngine()
+  return { mode: 'browser', ...(await e.pingLLM()) }
 }
 
 // ── 草稿字段 Schema（决定"输出什么字段"，默认含 event/due_date/location 三要素） ──

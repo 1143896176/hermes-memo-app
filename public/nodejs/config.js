@@ -135,6 +135,9 @@ function setConfig(opts) {
   if (before !== after) {
     saveToDisk();
     console.log('[config] 配置已更新并落盘:', CONFIG_FILE);
+    // 配置变了必须让缓存的模型实例失效，否则继续用旧 Key / 旧地址 / 旧模型发请求，
+    // 表现为"设置里明明改好了，识别还是不走模型"。resetModel 在下方定义（函数声明提升）。
+    resetModel();
   }
 }
 

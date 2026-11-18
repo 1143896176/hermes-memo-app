@@ -22,11 +22,19 @@ import { webViewEngineName } from './platform'
 export const DEFAULT_TEXT_MODEL = 'nvidia/nemotron-3.5-super-vl:free'
 /** OpenRouter 免费模型 */
 export const DEFAULT_VISION_MODEL = 'glm-4.6v-flash'
+/**
+ * 默认 LLM 地址：必须和 DEFAULT_TEXT_MODEL 属于同一家。
+ *
+ * 之前 App.vue 里另写了一个智谱地址兜底，全新安装（尤其 iOS）启动时
+ * 会把 Node 侧的 baseURL 覆盖成智谱，而 Key / 模型都是 OpenRouter 的，
+ * 结果每次调用都是 401，表现成"识别不走模型结构化"。
+ */
+export const DEFAULT_API_BASE = 'https://openrouter.ai/api/v1'
 export const LEGACY_TEXT_MODELS: string[] = []
 
 let _apiKey1 = ''
 let _apiKey2 = ''
-let _apiBase = 'https://openrouter.ai/api/v1'
+let _apiBase = DEFAULT_API_BASE
 let _modelName = DEFAULT_TEXT_MODEL
 let _ocrKey = ''
 let _ocrModel = DEFAULT_VISION_MODEL
@@ -567,6 +575,75 @@ async function callLLM(systemPrompt: string, userText: string, jsonMode = false)
     }
     console.error('LLM call failed:', e)
     throw new Error('网络错误: ' + (e?.message || String(e)))
+  }
+}
+
+/**
+ * 模型连通性自测（浏览器/原生 WebView 侧）
+ *
+ * 和 Node 侧 llm.ping 行为对齐：真的发一次请求，把 401 / 402 / 404 / 429
+ * 这类原始报错原样带回来，而不是让用户对着"未走模型结构化"猜。
+ */
+export async function pingLLM(): Promise<{
+  ok: boolean; ms: number; sample?: string
+  jsonOk?: boolean; jsonError?: string | null; error?: string
+  model: string; baseURL: string; hasKey: boolean
+}> {
+  const base = { model: _modelName, baseURL: _apiBase, hasKey: !!(_apiKey1 || _apiKey2) }
+  const key = _apiKey1 || _apiKey2
+  const t0 = Date.now()
+  if (!key) {
+    return { ok: false, ms: 0, error: '未配置 API Key', ...base }
+  }
+  const body: Record<string, any> = {
+    model: _modelName,
+    messages: [{ role: 'user', content: '只回复两个字：正常' }],
+    temperature: 0,
+  }
+  try {
+    const resp = await fetchWithTimeout(_apiBase + '/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+      body: JSON.stringify(body),
+    }, LLM_TIMEOUT_MS)
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '')
+      return { ok: false, ms: Date.now() - t0, error: `HTTP ${resp.status}: ${errText.slice(0, 200)}`, ...base }
+    }
+    const data = await resp.json()
+    if (data?.error) {
+      return { ok: false, ms: Date.now() - t0, error: `模型错误: ${data.error.message || JSON.stringify(data.error)}`, ...base }
+    }
+    const sample = String(data?.choices?.[0]?.message?.content || '').slice(0, 60)
+
+    // JSON 模式单独测一次：草稿结构化靠它，部分网关不支持 response_format
+    let jsonOk = false
+    let jsonError: string | null = null
+    try {
+      const r2 = await fetchWithTimeout(_apiBase + '/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+        body: JSON.stringify({ ...body, response_format: { type: 'json_object' } }),
+      }, LLM_TIMEOUT_MS)
+      if (!r2.ok) {
+        jsonError = `HTTP ${r2.status}: ${(await r2.text().catch(() => '')).slice(0, 160)}`
+      } else {
+        const d2 = await r2.json()
+        const t2 = String(d2?.choices?.[0]?.message?.content || '')
+        jsonOk = /\{/.test(t2)
+        if (!jsonOk) jsonError = '返回内容里没有 JSON'
+      }
+    } catch (e: any) {
+      jsonError = e?.name === 'AbortError' ? '超时（30s）' : (e?.message || String(e))
+    }
+    return { ok: true, ms: Date.now() - t0, sample, jsonOk, jsonError, ...base }
+  } catch (e: any) {
+    return {
+      ok: false,
+      ms: Date.now() - t0,
+      error: e?.name === 'AbortError' ? '请求超时（30s）' : (e?.message || String(e)),
+      ...base,
+    }
   }
 }
 
