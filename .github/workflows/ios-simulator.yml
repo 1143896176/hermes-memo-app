@@ -1,0 +1,148 @@
+name: iOS 模拟器包
+
+# 这条流水线产出的不是给真机装的 ipa，而是给 Appetize.io / Xcode 模拟器用的
+# .app 压缩包。两者互不通用：
+#   - 真机包（iphoneos SDK，arm64 设备切片）→ Sideloadly / AltStore 装机
+#   - 模拟器包（iphonesimulator SDK，arm64-sim 切片）→ Appetize 网页预览
+# 直接把 ipa 传到 Appetize 会报 "App is not a simulator build"。
+#
+# 为什么必须用 Apple Silicon runner：Node.js for Mobile 的 iOS 运行时
+# 只提供 arm64 模拟器切片（官方 Limitations 明确写了），没有 x86_64 模拟器切片。
+# 所以 macos-15（M 系列）能出包，Intel runner 会链接失败。
+
+on:
+  push:
+    branches: [ios-dev]
+    paths-ignore:
+      - '**/*.md'
+      - '.hermes/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ios-sim-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-simulator:
+    name: 构建模拟器 App
+    runs-on: macos-15
+    timeout-minutes: 40
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 打印工具链版本
+        run: |
+          sw_vers
+          xcodebuild -version
+          echo "runner 架构：$(uname -m)"
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.16.1
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: 缓存 NodeMobile.xcframework
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/capawesome-capacitor-nodejs
+          key: nodejs-mobile-24.5.0-capawesome.1
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      # 失败时最容易看不出原因的地方：xcframework 里没有模拟器切片。
+      # 先把 AvailableLibraries 打出来，链接报错时能直接判断是不是这个原因。
+      - name: 检查 NodeMobile 的架构切片
+        run: |
+          XCF=node_modules/@capawesome/capacitor-nodejs/ios/libnode/NodeMobile.xcframework
+          if [ ! -d "$XCF" ]; then
+            echo "::error::NodeMobile.xcframework 不存在，postinstall 没跑成功"
+            ls -la node_modules/@capawesome/capacitor-nodejs/ios || true
+            exit 1
+          fi
+          # Info.plist 是二进制格式，必须先 plutil 转成文本再判断
+          echo "=== AvailableLibraries ==="
+          plutil -p "$XCF/Info.plist" | grep -E 'LibraryIdentifier|SupportedPlatform' || true
+          if ! plutil -p "$XCF/Info.plist" | grep -q 'simulator'; then
+            echo "::error::这个 xcframework 没有模拟器切片，模拟器构建必定失败"
+            exit 1
+          fi
+
+      - name: 构建前端
+        run: pnpm build
+
+      - name: 同步到 iOS 工程
+        run: npx cap sync ios
+
+      - name: 补齐 Info.plist 权限/文件共享
+        run: node scripts/ios-setup.mjs
+
+      # 模拟器包不需要签名。ARCHS 固定 arm64：运行时只有 arm64-sim 切片。
+      - name: 构建（模拟器）
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/SimDerivedData \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            -quiet
+
+      - name: 校验产物架构并打包
+        run: |
+          APP=build/SimDerivedData/Build/Products/Debug-iphonesimulator/App.app
+          if [ ! -d "$APP" ]; then
+            echo "::error::没有生成 App.app"
+            find build/SimDerivedData/Build/Products -maxdepth 2 || true
+            exit 1
+          fi
+
+          echo "=== 主程序架构 ==="
+          lipo -info "$APP/App"
+          echo "=== 内嵌框架 ==="
+          ls "$APP/Frameworks" || true
+          echo "=== NodeMobile 架构 ==="
+          lipo -info "$APP/Frameworks/NodeMobile.framework/NodeMobile" || true
+
+          # 必须是 arm64（模拟器切片），不是 arm64 设备切片
+          lipo -info "$APP/App" | grep -q arm64 || { echo "::error::架构不对"; exit 1; }
+
+          # ditto 是 Apple 官方打包 .app 的方式，会保留符号链接和扩展属性，
+          # 用 zip -r 跟随符号链接有时会让模拟器装不上。
+          mkdir -p build/out
+          ditto -c -k --sequesterRsrc --keepParent "$APP" build/out/hermes-memo-simulator.zip
+          ls -lh build/out/hermes-memo-simulator.zip
+
+      - name: 上传模拟器包
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-memo-simulator-app
+          path: build/out/hermes-memo-simulator.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: 失败时上传现场
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-failure-context
+          path: |
+            ios/App/CapApp-SPM/Package.swift
+            build/SimDerivedData/Logs/Build/*.xcactivitylog
+          if-no-files-found: ignore
+          retention-days: 3
