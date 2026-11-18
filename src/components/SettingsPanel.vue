@@ -144,7 +144,7 @@ async function save() {
     </div>
 
     <h4 class="section-title">草稿字段（结构化输出）</h4>
-    <p class="desc">模型按这里的字段返回 JSON。<span v-if="schemaBrowserMode" class="browser-badge">需 APK 内配置</span></p>
+    <p class="desc">模型按这里的字段返回 JSON。<span v-if="schemaBrowserMode" class="browser-badge">需在 App 内配置</span></p>
     <textarea v-model="schemaText" class="schema-editor" rows="10" spellcheck="false" :disabled="schemaBrowserMode" placeholder='[{"key":"title","type":"string","desc":"标题","required":true}]' />
     <p class="schema-hint">type 支持 string/array；required: true 表示必填。<span v-if="schemaPath">配置文件：{{ schemaPath }}</span></p>
     <div class="schema-actions">

@@ -29,12 +29,73 @@ try {
   app = { datadir: () => pathMock.resolve('data') }
 }
 
+// ════════════════════════════════════
+// iOS 子进程护栏
+// ════════════════════════════════════
+//
+// nodejs-mobile 的 iOS 二进制没有子进程实现。第三方代码（Agent 的 grep 工具会
+// spawn rg）在 iOS 上调用时，可能不是抛一个可捕获的异常，而是让整个 Node 进程
+// 直接退出——进程一死，数据库、bridge、UI 全挂，且日志上看不出是谁干的。
+//
+// 所以在加载任何业务模块之前，把 child_process 的入口替换成"明确抛出"，
+// 让调用方走它自己的 catch/error 分支，代价是那一次工具调用失败，而不是 App 崩溃。
+// 只在 iOS 上装，Android / 桌面照常。
+if (process.platform === 'ios') {
+  try {
+    const cp = require('child_process')
+    const deny = (name) => function () {
+      throw new Error('child_process.' + name + ' 在 iOS 上不可用（nodejs-mobile 无子进程支持）')
+    }
+    for (const name of ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork']) {
+      if (typeof cp[name] === 'function') cp[name] = deny(name)
+    }
+  } catch (e) {
+    console.warn('[hermes-node] 安装 child_process 护栏失败:', (e && e.message) || String(e))
+  }
+}
+
 // ── 启动日志 ──
 console.log('[hermes-node] Node.js runtime started', {
   node: process.version,
   platform: process.platform,
   arch: process.arch,
 })
+
+// ════════════════════════════════════
+// 能力自检
+// ════════════════════════════════════
+//
+// nodejs-mobile 的 Android / iOS 两个二进制是分别编译的，能力不一定完全一致
+// （例如 node:sqlite 是否编进内核、有没有 ripgrep 可执行文件）。
+// 首次在 iOS 上跑如果数据库打不开，光看 "SQLITE_ERROR" 猜不出来是哪一层，
+// 所以启动时把关键能力打一遍，问题一眼可见。
+const capabilities = (() => {
+  const caps = { sqlite: false, sqliteError: null, ripgrep: false }
+  try {
+    require('node:sqlite')
+    caps.sqlite = true
+  } catch (e) {
+    caps.sqliteError = (e && e.message) || String(e)
+  }
+  // iOS 的 nodejs-mobile 不实现子进程：spawn 不是抛异常，而是可能让进程直接退出。
+  // 为了一个"有没有 rg"的诊断去冒启动闪退的风险不值得，iOS 上一律按不可用处理。
+  if (process.platform === 'ios') {
+    caps.ripgrep = false
+  } else {
+    try {
+      const { execFileSync } = require('child_process')
+      execFileSync('which', ['rg'], { stdio: 'ignore', timeout: 1500 })
+      caps.ripgrep = true
+    } catch {
+      caps.ripgrep = false
+    }
+  }
+  return caps
+})()
+console.log('[hermes-node] capabilities:', capabilities)
+if (!capabilities.sqlite) {
+  console.error('[hermes-node] node:sqlite 不可用，数据库相关功能将全部失败:', capabilities.sqliteError)
+}
 
 // ── 确保数据目录存在（用 app.datadir() 获取 App 私有可写目录） ──
 const fs = require('fs')

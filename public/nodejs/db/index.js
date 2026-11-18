@@ -37,9 +37,15 @@ function getDatabaseSync() {
   try {
     _DatabaseSync = require('node:sqlite').DatabaseSync;
   } catch (e) {
-    // Fallback：某些 Node 版本需要 --experimental-sqlite 标志
-    // nodejs-mobile v24.5 已默认启用，这里做兼容
-    throw new Error('node:sqlite 不可用: ' + (e && e.message || String(e)));
+    // android / darwin 是两套分别编译的 nodejs-mobile 二进制，
+    // iOS 上若这个内建模块没编进去，只有在第一次开库时才会暴露。
+    // 把平台和"这不是数据丢了"写清楚，避免用户以为备忘全没了。
+    const platform = process.platform === 'darwin' ? 'iOS' : process.platform;
+    throw new Error(
+      `本机 Node 运行时（${platform}）没有 sqlite 支持：` +
+      (e && e.message || String(e)) +
+      '；已有数据仍在磁盘上，请更新 App 版本'
+    );
   }
   return _DatabaseSync;
 }

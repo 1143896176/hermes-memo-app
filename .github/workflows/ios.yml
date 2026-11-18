@@ -1,0 +1,148 @@
+name: iOS 构建
+
+# 为什么放在 GitHub 上跑：
+# iOS 编译必须有 macOS + Xcode，本机是 Windows。GitHub 的 macOS runner
+# 在【公开仓库】下完全免费且不限分钟；私有仓库则按 10 倍倍率扣额度
+# （免费 2000 分钟 → 实际只有约 200 分钟 macOS），且必须先绑定付款方式。
+#
+# 产物是未经签名的 .ipa，用 Windows 上的 Sideloadly / AltStore 配合
+# 免费 Apple ID 就能装到自己的 iPhone（7 天有效期）。要走 TestFlight
+# 或给别人装，才需要 99 美元/年的开发者账号。
+
+on:
+  push:
+    branches: [ios-dev, main, master]
+    paths-ignore:
+      - '**/*.md'
+      - '.hermes/**'
+  workflow_dispatch:
+
+# 同一分支连续推送时，取消还在跑的上一次，省分钟
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 构建未签名 IPA
+    # macOS runner 镜像里的 Xcode 是默认版本（macos-15 目前是 Xcode 16.x）。
+    # 想锁定版本就加一步：sudo xcode-select -s /Applications/Xcode_16.4.app
+    # 注意镜像会随 GitHub 更新而退役，报 "The label 'macos-15' is not supported"
+    # 时换成 macos-latest 或新的镜像名即可。
+    runs-on: macos-15
+    timeout-minutes: 40
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 打印工具链版本
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcode-select -p
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.16.1
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      # Node 运行时的 iOS 二进制（NodeMobile.xcframework）由 postinstall 从
+      # GitHub Releases 下载，体积不小，缓存下来避免每次重新拉。
+      - name: 缓存 NodeMobile.xcframework
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/capawesome-capacitor-nodejs
+          key: nodejs-mobile-24.5.0-capawesome.1
+
+      # 关键一步：postinstall 只在 darwin 上真正下载 NodeMobile.xcframework。
+      # pnpm 12 默认拦截构建脚本，放行规则在 pnpm-workspace.yaml 的 allowBuilds。
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 校验 Node 运行时二进制
+        run: |
+          XCF=node_modules/@capawesome/capacitor-nodejs/ios/libnode/NodeMobile.xcframework
+          if [ ! -d "$XCF" ]; then
+            echo "::error::NodeMobile.xcframework 不存在，Xcode 链接阶段必然失败"
+            echo "常见原因：postinstall 被拦截，或 CAPACITOR_NODEJS_SKIP_DOWNLOAD=1"
+            ls -la node_modules/@capawesome/capacitor-nodejs/ios || true
+            exit 1
+          fi
+          echo "NodeMobile.xcframework 就绪："
+          ls "$XCF"
+
+      - name: 类型检查
+        run: pnpm exec vue-tsc --noEmit
+
+      - name: 构建前端
+        run: pnpm build
+
+      # 会把 dist 拷进 ios/App/App/public，并按当前机器重写
+      # CapApp-SPM/Package.swift 里的 node_modules 相对路径
+      - name: 同步到 iOS 工程
+        run: npx cap sync ios
+
+      - name: 补齐 Info.plist 权限/文件共享
+        run: node scripts/ios-setup.mjs
+
+      # 不签名归档：产物没有 _CodeSignature，交给 Sideloadly 在本地签。
+      # 这样 CI 里不需要任何证书相关 Secret。
+      - name: Archive（未签名）
+        run: |
+          set -o pipefail
+          mkdir -p build
+          xcodebuild archive \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            -archivePath build/App.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            EXPANDED_CODE_SIGN_IDENTITY="" \
+            -quiet
+
+      - name: 打包成 ipa
+        run: |
+          APP=build/App.xcarchive/Products/Applications/App.app
+          if [ ! -d "$APP" ]; then
+            echo "::error::归档里没有 App.app，看看上面的 xcodebuild 日志"
+            find build/App.xcarchive/Products -maxdepth 3 || true
+            exit 1
+          fi
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/
+          cd build
+          zip -qry hermes-memo-unsigned.ipa Payload
+          ls -lh hermes-memo-unsigned.ipa
+          echo "--- 关键文件自检 ---"
+          ls Payload/App.app/nodejs/index.js Payload/App.app/sql-wasm.wasm 2>&1 || true
+
+      - name: 上传 ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-memo-unsigned-ipa
+          path: build/hermes-memo-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      # 失败时把归档目录结构传上去，省得只凭日志猜
+      - name: 失败时上传现场
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-failure-context
+          path: |
+            build/App.xcarchive/Products/Applications/App.app/Info.plist
+            ios/App/CapApp-SPM/Package.swift
+          if-no-files-found: ignore
+          retention-days: 3

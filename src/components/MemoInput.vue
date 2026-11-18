@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { ocrRecognize, transcribeAudio, fetchGlossary } from '../services/api'
+import { isAndroid } from '../services/platform'
 import {
   systemSpeechSupported,
   probeSystemSpeech,
@@ -127,7 +128,11 @@ async function toggleVoiceMode() {
   resetSystemSpeechProbe()
   const ok = await isSystemSpeechAvailable()
   if (!ok) {
-    showTip('本机没有可用的系统识别服务（仅有 Google 服务，国内不可用），只能走云端')
+    // 这条提示只可能出现在 Android（iOS 没有原生识别插件，入口根本不渲染）。
+    // 但真机上一旦探测失败，用户需要知道"是环境的锅，不是 App 坏了"。
+    showTip(isAndroid()
+      ? '本机没有可用的系统识别服务（仅有 Google 服务，国内不可用），只能走云端'
+      : '本机没有可用的系统识别服务，只能走云端')
     return
   }
   voiceMode.value = 'system'
@@ -377,10 +382,13 @@ async function triggerImage(mode: 'camera' | 'gallery') {
     <p v-if="ocrError" class="warn"><van-icon name="warning-o" size="12" /> {{ ocrError }}</p>
     <p v-if="!sysListening && !recording && !voiceError && !ocrError" class="hint">
       Ctrl+Enter 发送 |
-      <button class="mode-link" @click="toggleVoiceMode">
+      <!-- 系统识别是 Android 原生插件能力，iOS 没有对应实现：
+           直接渲染成静态文字，避免点一下弹出"本机没有可用服务"的死路 -->
+      <button v-if="systemSpeechSupported()" class="mode-link" @click="toggleVoiceMode">
         <van-icon name="volume-o" size="12" />
         {{ voiceMode === 'system' ? ('系统语音识别' + (sysLabel ? `（${sysLabel}）` : '')) : '云端语音转文字' }}
       </button>
+      <span v-else class="mode-static"><van-icon name="volume-o" size="12" /> 云端语音转文字</span>
       | 拍照 OCR
     </p>
   </div>
@@ -413,6 +421,7 @@ textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10
 .recording-hint .van-icon, .live-hint .van-icon { vertical-align: -2px; }
 .hint { margin-top: 8px; font-size: 12px; color: #999; text-align: center; }
 .mode-link { display: inline-flex; align-items: center; gap: 2px; vertical-align: -2px; padding: 0; border: none; background: none; color: #4a90d9; font-size: 12px; cursor: pointer; }
+.mode-static { display: inline-flex; align-items: center; gap: 2px; vertical-align: -2px; color: #4a90d9; font-size: 12px; }
 .tip .van-icon, .warn .van-icon { vertical-align: -2px; }
 .tip { margin-top: 8px; font-size: 12px; color: #8a6d3b; background: #fff8e1; padding: 8px; border-radius: 6px; text-align: center; }
 .warn { margin-top: 8px; font-size: 12px; color: #c62828; text-align: center; background: #fdecea; padding: 8px; border-radius: 6px; }

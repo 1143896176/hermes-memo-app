@@ -15,6 +15,7 @@ import { syncApiConfigToNode, isNativeEnv, waitForNode } from './services/node-b
 import { loadNodejsPluginSync } from './services/node-bridge'
 import { getApiConfig, setApiConfig, initEngine, DEFAULT_TEXT_MODEL, DEFAULT_VISION_MODEL, LEGACY_TEXT_MODELS } from './services/engine'
 import { invalidateAgent } from './services/agent'
+import { initKeyboardDismiss } from './services/keyboard'
 
 type MainTab = 'memos' | 'agent'
 type PanelKey = 'glossary' | 'export' | 'settings' | 'memory' | 'knowledge'
@@ -41,6 +42,8 @@ const refreshKey = ref(0)
 const errorMsg = ref('')
 
 loadNodejsPluginSync()
+// iOS 没有返回键收键盘，点空白处失焦（Android 无副作用，统一装上）
+initKeyboardDismiss()
 ;(async () => {
   try { await initEngine() } catch (e) { console.warn('[app] init:', e) }
   const cfg = getApiConfig()

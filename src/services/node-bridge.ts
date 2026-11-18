@@ -294,7 +294,7 @@ export async function getDraftSchema() {
 
 export async function setDraftSchema(fields: any[] | null) {
   if (await shouldUseNode()) return callNode('draft.schema.set', { fields })
-  throw new Error('自定义草稿字段依赖 Node 运行时，请在 APK 内配置（浏览器预览不支持）')
+  throw new Error('自定义草稿字段依赖 Node 运行时，请在 App 内配置（浏览器预览不支持）')
 }
 
 // ── 术语词典 ──

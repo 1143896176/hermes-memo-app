@@ -1,0 +1,15 @@
+# pnpm 12 默认不执行依赖的 postinstall，未审批的构建脚本会让 install 直接失败
+# （ERR_PNPM_IGNORED_BUILDS），必须在这里显式放行。
+#
+# 为什么这两个必须放行：
+#   @capawesome/capacitor-nodejs  —— postinstall 负责把 NodeMobile.xcframework
+#     （iOS 的 Node 运行时二进制）下载到 node_modules 里。被拦掉的话 Mac 上
+#     xcodebuild 会报找不到 NodeMobile 模块，且看不出是"下载根本没跑"。
+#     该脚本只在 macOS 上真正下载，Windows/Linux 会自动跳过。
+#   esbuild                       —— 需要 postinstall 解压平台对应的二进制，
+#     被拦掉时 vite build 报 "You installed esbuild for another platform"。
+#
+# 注：旧版的 onlyBuiltDependencies 在 pnpm 11 已废弃，迁移到 allowBuilds（映射形式）。
+allowBuilds:
+  '@capawesome/capacitor-nodejs': true
+  esbuild: true

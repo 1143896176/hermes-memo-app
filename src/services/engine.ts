@@ -8,6 +8,7 @@
  */
 
 import initSqlJs, { type Database as SqlJsDb } from 'sql.js'
+import { webViewEngineName } from './platform'
 
 // ═══════════════════════════
 // API 配置（用户自行填入，存本地 DB）
@@ -918,7 +919,7 @@ export async function transcribeAudio(blob: Blob, opts: TranscribeOptions = {}):
         console.warn('[asr] 转 WAV 失败:', e?.message)
         throw new Error(
           '录音转码失败：当前 WebView 无法解码 ' + (srcType || '音频')
-          + '。请在系统设置里更新「Android System WebView」后重试'
+          + '。请更新系统「' + webViewEngineName() + '」后重试'
         )
       }
     }

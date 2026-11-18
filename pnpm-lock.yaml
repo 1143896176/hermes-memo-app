@@ -20,6 +20,9 @@ importers:
       '@capacitor/ios':
         specifier: ^8.6.2
         version: 8.6.2(@capacitor/core@8.6.2)
+      '@capacitor/keyboard':
+        specifier: ^8.0.6
+        version: 8.0.6(@capacitor/core@8.6.2)
       '@capawesome/capacitor-nodejs':
         specifier: ^0.3.0
         version: 0.3.0(@capacitor/core@8.6.2)
@@ -109,6 +112,11 @@ packages:
     resolution: {integrity: sha512-YnVm0lRA1mQWK0SKd2bdJIOG+PXRRDDdndZ1+nGqeiob+QmHZmb4wWo5gVpWhoHO37pGi2qzH5w5WGvfKrs+Gg==}
     peerDependencies:
       '@capacitor/core': ^8.6.0
+
+  '@capacitor/keyboard@8.0.6':
+    resolution: {integrity: sha512-Bbe+9V0qaT6dzEFJEK7BUWR01l2+vZE8FM5ITF/WgKtx+G6eGZ6d5+YiSMRJBAK0VGjdO59v8yiQ10Doa5KyvQ==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
 
   '@capawesome/capacitor-nodejs@0.3.0':
     resolution: {integrity: sha512-yOv+rwiIr1HdUsnpNyv9jnTvx2upx07+88fcL6rb1K8oLswmP0OQxM37O2B+8EqTGMMWUG+OtAiVSZ4njdrpqg==}
@@ -1825,6 +1833,10 @@ snapshots:
       tslib: 2.9.1
 
   '@capacitor/ios@8.6.2(@capacitor/core@8.6.2)':
+    dependencies:
+      '@capacitor/core': 8.6.2
+
+  '@capacitor/keyboard@8.0.6(@capacitor/core@8.6.2)':
     dependencies:
       '@capacitor/core': 8.6.2
 

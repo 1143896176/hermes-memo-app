@@ -8,13 +8,18 @@
     "build": "vite build",
     "preview": "vite preview",
     "cap:sync": "npx cap sync android",
-    "cap:open": "npx cap open android"
+    "cap:sync:android": "npx cap sync android",
+    "cap:sync:ios": "npx cap sync ios",
+    "cap:open": "npx cap open android",
+    "cap:open:ios": "npx cap open ios",
+    "ios:setup": "node scripts/ios-setup.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.2",
     "@capacitor/cli": "^8.6.2",
     "@capacitor/core": "^8.6.2",
     "@capacitor/ios": "^8.6.2",
+    "@capacitor/keyboard": "^8.0.6",
     "@capawesome/capacitor-nodejs": "^0.3.0",
     "@langchain/core": "^1.4.1",
     "@langchain/langgraph": "^1.7.4",
@@ -34,8 +39,5 @@
     "vite": "^8.3.6",
     "vite-plugin-node-polyfills": "^0.28.0",
     "vue-tsc": "^3.3.14"
-  },
-  "allowScripts": {
-    "@capawesome/capacitor-nodejs@0.3.0": true
   }
 }
