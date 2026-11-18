@@ -160,7 +160,10 @@ jobs:
           # 所以这一项决定了能不能看到 [hermes-node] 的启动自检。
           xcrun simctl launch --terminate-running-process --console-pty "$DEVICE" "$BUNDLE_ID" > "$LOG" 2>&1 &
           LPID=$!
-          echo "launch pid=$LPID，观察 ${WAIT}s"
+          # 注意：变量后面紧跟中文时必须用 ${VAR} 花括号。
+          # bash 3.2 会把全角逗号/括号当成变量名的一部分，于是 "$LPID，" 会被解析成
+          # 变量 LPID，→ set -u 下直接 unbound variable（第一次跑就踩到了）。
+          echo "launch pid=${LPID}, 观察 ${WAIT}s"
 
           ALIVE=1
           for i in $(seq 1 "$WAIT"); do
@@ -221,7 +224,7 @@ jobs:
           xcrun simctl shutdown "$DEVICE" 2>/dev/null || true
 
           if [ "$FAILED" != "0" ]; then
-            echo "::error::冒烟测试未通过（failed=$FAILED）"
+            echo "::error::冒烟测试未通过 (failed=${FAILED})"
             exit 1
           fi
           echo "✓ 冒烟测试通过"
