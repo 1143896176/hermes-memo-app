@@ -222,11 +222,11 @@ const panelMeta = computed(() => {
       <AgentChat v-else class="tab-page" />
     </main>
 
-    <!-- 草稿生成中：全屏 loading 遮罩 -->
-    <van-overlay :show="draftLoading && !draft" z-index="9999">
+    <!-- 草稿生成中：全屏 loading 遮罩（首次生成 + 重新生成都显示） -->
+    <van-overlay :show="draftLoading" z-index="9999">
       <div class="loading-mask">
         <van-loading size="36" color="#4a90d9" vertical>
-          AI 正在解析备忘...
+          {{ draft ? 'AI 正在重新解析...' : 'AI 正在解析备忘...' }}
         </van-loading>
       </div>
     </van-overlay>

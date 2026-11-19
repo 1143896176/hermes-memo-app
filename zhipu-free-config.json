@@ -1,0 +1,21 @@
+{
+  "_note": "智谱 BigModel 全免费配置（导入后仍需手动填智谱 API Key）",
+  "_provider": "智谱 BigModel (open.bigmodel.cn)",
+  "_requires": "在 App 设置里手动填写 LLM Key 和 OCR Key（智谱 API Key），地址和模型已预填",
+  "_models": {
+    "text": "glm-4.6v-flash（智谱当前永久免费旗舰，200K 上下文）",
+    "vision_ocr": "glm-4.6v-flash（同模型，视觉能力做 OCR）"
+  },
+  "_caveats": [
+    "导入只覆盖 config.model 和 config.baseURL；ocrModel 不会被这个文件覆盖（App 导入逻辑限制）",
+    "ocrModel 默认值 DEFAULT_VISION_MODEL 已是 glm-4.6v-flash，未改过的设备无需操作",
+    "如 ocrModel 被改过，请到设置 → 视觉模型 手动填 glm-4.6v-flash",
+    "智谱免费档约 5 QPS，高峰期可能 429，代码已有指数退避",
+    "Key 必须是智谱平台 Key，不是 OpenRouter 的 Key"
+  ],
+  "exported_at": "2026-11-18T08:08:46Z",
+  "config": {
+    "model": "glm-4.6v-flash",
+    "baseURL": "https://open.bigmodel.cn/api/paas/v4"
+  }
+}

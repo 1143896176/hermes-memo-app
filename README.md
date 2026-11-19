@@ -2,10 +2,12 @@
 
 一个基于 Vue3 + Capacitor + DeepAgents 的智能备忘录应用，Android / iOS 双端同一套代码。
 
+> **微信小程序版**：见同目录下 `hermes-memo-wx`（基于微信云开发，功能等价、最小开发量迁移）。
+
 ## 核心特性
 
 - **🤖 Agent 架构（灵魂）**：基于 deepagents/browser + LangChain，Agent 自主决策调用工具（保存/搜索/列表/删除/术语/技能/导出），不是手工管线
-- **零后端依赖**：所有数据用 sql.js（SQLite WASM）存本地并持久化到 IndexedDB；Agent 全部在 WebView 内运行
+- **零后端依赖**：原生端用 Node 运行时 `node:sqlite`（FTS5 全文搜索）；浏览器预览用 sql.js（SQLite WASM）持久化到 IndexedDB；Agent 全部在 WebView 内运行
 - **双交互模式**：
   - 📋 备忘录 tab：快捷录入（文本/语音/拍照 OCR）→ LLM 解析草稿 → 确认保存
   - 🤖 Agent 对话 tab：自然语言对话，Agent 自主调用工具
@@ -26,8 +28,20 @@
 | 构建 | Vite 8 |
 | 移动壳 | Capacitor 8（Android + iOS） |
 | 本地存储 | 原生：Node 运行时 `node:sqlite`（FTS5）；浏览器预览：sql.js → IndexedDB |
-| OCR | 智谱 `glm-4v-flash` |
-| 语音 | Android：系统 SpeechRecognizer；iOS：系统 SFSpeechRecognizer（离线优先）；两者都带「录音 + 云端 ASR」兜底 |
+| OCR | 智谱 `glm-4.6v-flash`（永久免费） |
+| ASR | 默认智谱 GLM-ASR（`open.bigmodel.cn`，云端识别）；Android/iOS 系统语音识别作为离线兜底 |
+
+### 默认 LLM 配置
+
+| 项 | 默认值 | 说明 |
+|---|---|---|
+| 文本模型 | `nvidia/nemotron-3.5-super-vl:free` | OpenRouter 免费档 |
+| 视觉模型（OCR） | `glm-4.6v-flash` | 智谱永久免费 |
+| LLM 地址 | `https://openrouter.ai/api/v1` | OpenRouter（国内多数网络可达，无需翻墙） |
+| ASR 地址 | `https://open.bigmodel.cn/api/paas/v4` | 智谱（国内直连） |
+
+**推荐配置**：全切智谱 BigModel（`glm-4.6v-flash` 文本 + 视觉 + ASR 三合一，全国内直连、零翻墙、零成本）。
+仓库根目录有 `zhipu-free-config.json`，App 内「导出分享 → 导入备份」即可一键切换。
 
 ## 目录结构
 
@@ -154,8 +168,11 @@ scheme，Xcode 打开时会自动补，但 GitHub runner 上没有这个动作�
 App 启动后点右上角 ⚙️ → 🔑 API 设置：
 
 - **LLM API Key**：OpenAI 兼容接口的 Key（主 + 可选备用）
-- **接口地址** / **模型名称**：默认 `https://api.openai.com/v1` / `gpt-4o-mini`，可换 DeepSeek、智谱、Kimi、自部署代理等
-- **OCR API Key**：智谱开放平台 Key（用于拍照 OCR，免费模型 `glm-4v-flash`）
+- **LLM 地址 / 文本模型**：默认 OpenRouter（`https://openrouter.ai/api/v1` + `nvidia/nemotron-3.5-super-vl:free`）
+  - 想换国内免费方案：导入 `zhipu-free-config.json`（App 内「导出分享 → 导入备份」），地址变 `https://open.bigmodel.cn/api/paas/v4`、模型变 `glm-4.6v-flash`
+  - 也可换 DeepSeek、Kimi、自部署代理等
+- **OCR API Key**：智谱开放平台 Key（拍照 OCR，免费模型 `glm-4.6v-flash`）
+- **ASR Key / 地址**：默认智谱 `open.bigmodel.cn`（语音转写）；也支持 Groq、硅基流动等 OpenAI 兼容 ASR
 
 Key 在本地用 base64 混淆后存 SQLite，不上传。
 
@@ -168,9 +185,17 @@ Key 在本地用 base64 混淆后存 SQLite，不上传。
 
 ## 数据持久化
 
+**原生端（Android / iOS）**：
+- Node 运行时（nodejs-mobile）内嵌 `node:sqlite`（Node 24 内置，支持 FTS5）
+- 多个 `.db` 文件存 App 私有目录（`memos.db` / `glossary.db` / `feedback.db` / `knowledge.db` / `hermes.db`）
+- WAL 模式，进程重启数据不丢
+
+**浏览器预览（开发模式）**：
 - sql.js 是 SQLite 编译成 WebAssembly 的内存数据库，浏览器关闭即丢
 - 引擎层每次写操作后 `db.export()` 出整个 SQLite 二进制，写入 IndexedDB（key=`sqlite-db`，db=`hermes-memo`）
 - 启动时先尝试从 IndexedDB 加载二进制恢复，失败则新建空库
+
+**微信小程序版**（`hermes-memo-wx`）：用云开发数据库（NoSQL），非 SQLite。
 
 ## 许可
 
